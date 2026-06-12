@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TouchID / WebAuthn PRF 検証</title>
+    <style>
+      * { box-sizing: border-box; }
+      body {
+        margin: 0; padding: 24px;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+        font-size: 14px; color: #1f2328; background: #f6f8fa;
+      }
+      main { max-width: 760px; margin: 0 auto; }
+      h1 { font-size: 20px; margin: 0 0 4px; }
+      .sub { color: #656d76; margin: 0 0 20px; line-height: 1.5; }
+      .card { background: #fff; border: 1px solid #d0d7de; border-radius: 10px; padding: 18px; margin-bottom: 16px; }
+      h2 { font-size: 15px; margin: 0 0 12px; }
+      label { display: block; font-size: 12px; color: #656d76; margin-bottom: 6px; }
+      input { width: 100%; padding: 8px 10px; border: 1px solid #d0d7de; border-radius: 6px; font-size: 14px; }
+      .row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+      button { padding: 8px 14px; border: 1px solid #d0d7de; border-radius: 6px; background: #f6f8fa; cursor: pointer; font-size: 14px; }
+      button:hover { background: #eef1f4; }
+      button.primary { background: #1f6feb; color: #fff; border-color: #1f6feb; }
+      .env { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: #656d76; }
+      pre#log {
+        background: #0d1117; color: #d1d5da; border-radius: 8px; padding: 14px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px;
+        line-height: 1.5; white-space: pre-wrap; word-break: break-all; max-height: 380px; overflow: auto; margin: 0;
+      }
+      .ok { color: #3fb950; } .err { color: #f85149; } .warn { color: #d29922; } .dim { color: #8b949e; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>TouchID / WebAuthn PRF 検証</h1>
+      <p class="sub">
+        この拡張オリジン（<span id="origin" class="env"></span>）から WebAuthn の PRF 拡張が使えるか、
+        TouchID で決まった秘密値を取り出せるかを実機確認します。金庫とは未結合です。
+      </p>
+
+      <div class="card">
+        <h2>① 設定</h2>
+        <label for="rpid">rp.id（空ならブラウザ既定に任せる）</label>
+        <input id="rpid" type="text" placeholder="空 = 既定 / 例: localhost / example.com" />
+        <div class="row">
+          <button id="btn-register" class="primary">パスキー登録（create / TouchID）</button>
+          <button id="btn-clear">保存済みを消す</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>② PRF 取得（解錠相当）</h2>
+        <p class="sub" style="margin-bottom:0">
+          登録後にこれを押すと TouchID が出ます。2回押して同じ秘密値が返れば「鍵として使える」＝成功です。
+        </p>
+        <div class="row">
+          <button id="btn-get" class="primary">TouchID で PRF 取得（get）</button>
+          <button id="btn-get2">もう一度取得（安定性確認）</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>ログ</h2>
+        <pre id="log"></pre>
+      </div>
+    </main>
+    <script type="module" src="verify.js"></script>
+  </body>
+</html>
