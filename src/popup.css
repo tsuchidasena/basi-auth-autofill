@@ -1,0 +1,85 @@
+:root {
+  --bg: #ffffff;
+  --fg: #1f2328;
+  --muted: #656d76;
+  --border: #d0d7de;
+  --primary: #1f6feb;
+  --primary-fg: #ffffff;
+  --ok: #1a7f37;
+  --warn: #9a6700;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  width: 320px;
+  margin: 0;
+  padding: 12px 14px 14px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  font-size: 13px;
+  color: var(--fg);
+  background: var(--bg);
+}
+
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+h1 { font-size: 14px; margin: 0; }
+
+.badge {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #eaeef2;
+  color: var(--muted);
+}
+.badge.unlocked { background: #dafbe1; color: var(--ok); }
+.badge.locked { background: #fff1cf; color: var(--warn); }
+
+.hint { color: var(--muted); margin: 0 0 8px; line-height: 1.4; }
+
+input {
+  width: 100%;
+  padding: 7px 9px;
+  margin-bottom: 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+button {
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #f6f8fa;
+  cursor: pointer;
+  font-size: 13px;
+}
+button:hover { background: #eef1f4; }
+button.primary { background: var(--primary); color: var(--primary-fg); border-color: var(--primary); width: 100%; }
+button.primary:hover { filter: brightness(0.95); }
+
+.site-box {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+  margin-bottom: 10px;
+}
+.site-label { font-size: 11px; color: var(--muted); }
+.site-host { font-size: 14px; font-weight: 600; word-break: break-all; }
+.match-status { font-size: 12px; margin-top: 4px; }
+.match-status.found { color: var(--ok); }
+.match-status.none { color: var(--muted); }
+
+details#quick-add { margin-bottom: 10px; }
+details#quick-add summary { cursor: pointer; margin-bottom: 8px; color: var(--primary); }
+
+.row { display: flex; gap: 8px; }
+.row button { flex: 1; }
+
+.msg { min-height: 16px; margin: 8px 0 0; font-size: 12px; color: var(--warn); }
+.msg.ok { color: var(--ok); }

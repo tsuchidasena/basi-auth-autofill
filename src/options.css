@@ -1,0 +1,81 @@
+:root {
+  --bg: #f6f8fa;
+  --card: #ffffff;
+  --fg: #1f2328;
+  --muted: #656d76;
+  --border: #d0d7de;
+  --primary: #1f6feb;
+  --ok: #1a7f37;
+  --warn: #9a6700;
+  --danger: #cf222e;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 24px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  font-size: 14px;
+  color: var(--fg);
+  background: var(--bg);
+}
+
+main { max-width: 760px; margin: 0 auto; }
+
+h1 { font-size: 20px; margin: 0 0 4px; }
+.sub { color: var(--muted); margin: 0 0 20px; }
+h2 { font-size: 15px; margin: 0 0 12px; }
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 18px;
+  margin-bottom: 18px;
+}
+.card.danger { border-color: #ffc1c1; }
+
+.hint { color: var(--muted); line-height: 1.5; margin: 0 0 12px; }
+
+input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 14px;
+  margin-bottom: 10px;
+}
+
+button {
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #f6f8fa;
+  cursor: pointer;
+  font-size: 14px;
+}
+button:hover { background: #eef1f4; }
+button.primary { background: var(--primary); color: #fff; border-color: var(--primary); }
+button.primary:hover { filter: brightness(0.95); }
+button.danger-btn { background: var(--danger); color: #fff; border-color: var(--danger); }
+
+.toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
+.badge { font-size: 12px; padding: 3px 10px; border-radius: 999px; background: #eaeef2; color: var(--muted); }
+.badge.unlocked { background: #dafbe1; color: var(--ok); }
+
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--border); font-size: 13px; vertical-align: middle; }
+th { color: var(--muted); font-weight: 600; }
+td.host { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; word-break: break-all; }
+td.actions { white-space: nowrap; text-align: right; }
+td.actions button { padding: 4px 8px; font-size: 12px; margin-left: 6px; }
+
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
+.grid label { display: block; font-size: 12px; color: var(--muted); }
+.grid label input { margin-top: 4px; }
+
+.row { display: flex; gap: 10px; }
+
+.msg { min-height: 18px; margin: 8px 0 0; font-size: 13px; color: var(--warn); }
+.msg.ok { color: var(--ok); }

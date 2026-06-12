@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Basic Auth Autofill</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header>
+      <h1>Basic Auth Autofill</h1>
+      <span id="state-badge" class="badge"></span>
+    </header>
+
+    <!-- View: first run, set master password -->
+    <section id="view-setup" hidden>
+      <p class="hint">最初にマスターパスワードを設定します。これで資格情報を暗号化します。</p>
+      <input id="setup-pw" type="password" placeholder="マスターパスワード" autocomplete="new-password" />
+      <input id="setup-pw2" type="password" placeholder="確認のため再入力" autocomplete="new-password" />
+      <button id="setup-btn" class="primary">設定する</button>
+    </section>
+
+    <!-- View: locked, ask to unlock -->
+    <section id="view-locked" hidden>
+      <p class="hint">マスターパスワードで解錠してください。</p>
+      <input id="unlock-pw" type="password" placeholder="マスターパスワード" autocomplete="current-password" />
+      <button id="unlock-btn" class="primary">解錠</button>
+    </section>
+
+    <!-- View: unlocked -->
+    <section id="view-unlocked" hidden>
+      <div class="site-box">
+        <div class="site-label">現在のサイト</div>
+        <div id="current-host" class="site-host">—</div>
+        <div id="match-status" class="match-status"></div>
+      </div>
+
+      <details id="quick-add">
+        <summary>このサイトの資格情報を登録</summary>
+        <input id="qa-host" type="text" placeholder="host (例: example.com)" />
+        <input id="qa-user" type="text" placeholder="ユーザ名" autocomplete="off" />
+        <input id="qa-pass" type="password" placeholder="パスワード" autocomplete="off" />
+        <button id="qa-save" class="primary">保存</button>
+      </details>
+
+      <div class="row">
+        <button id="options-btn">すべての登録を管理</button>
+        <button id="lock-btn">施錠</button>
+      </div>
+    </section>
+
+    <p id="msg" class="msg" role="status"></p>
+
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>
