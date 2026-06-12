@@ -3,12 +3,13 @@
   "name": "Basic Auth Autofill",
   "version": "0.1.0",
   "description": "HTTP Basic 認証のネイティブダイアログに、暗号化保存した資格情報を自動入力します。",
-  "minimum_chrome_version": "132",
+  "minimum_chrome_version": "108",
   "permissions": [
     "webRequest",
     "webRequestAuthProvider",
     "storage",
-    "tabs"
+    "tabs",
+    "nativeMessaging"
   ],
   "host_permissions": [
     "<all_urls>"
@@ -21,5 +22,5 @@
     "default_popup": "src/popup.html",
     "default_title": "Basic Auth Autofill"
   },
-  "options_page": "src/verify.html"
+  "options_page": "src/native-test.html"
 }

@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Touch ID (Native Messaging) 検証</title>
+    <style>
+      * { box-sizing: border-box; }
+      body { margin: 0; padding: 24px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; font-size: 14px; color: #1f2328; background: #f6f8fa; }
+      main { max-width: 760px; margin: 0 auto; }
+      h1 { font-size: 20px; margin: 0 0 4px; }
+      .sub { color: #656d76; margin: 0 0 20px; line-height: 1.5; }
+      .card { background: #fff; border: 1px solid #d0d7de; border-radius: 10px; padding: 18px; margin-bottom: 16px; }
+      h2 { font-size: 15px; margin: 0 0 12px; }
+      .ext-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; background: #eaeef2; padding: 2px 6px; border-radius: 4px; user-select: all; }
+      .row { display: flex; gap: 10px; flex-wrap: wrap; }
+      button { padding: 8px 14px; border: 1px solid #d0d7de; border-radius: 6px; background: #f6f8fa; cursor: pointer; font-size: 14px; }
+      button:hover { background: #eef1f4; }
+      button.primary { background: #1f6feb; color: #fff; border-color: #1f6feb; }
+      pre#log { background: #0d1117; color: #d1d5da; border-radius: 8px; padding: 14px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; line-height: 1.5; white-space: pre-wrap; word-break: break-all; max-height: 380px; overflow: auto; margin: 0; }
+      .ok { color: #3fb950; } .err { color: #f85149; } .warn { color: #d29922; } .dim { color: #8b949e; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Touch ID (Native Messaging) 検証</h1>
+      <p class="sub">
+        ネイティブホスト経由で Touch ID を出し、キーチェーンの鍵を取り出せるか確認します。<br />
+        この拡張の ID（install.sh に渡す値）: <span id="ext-id" class="ext-id"></span>
+      </p>
+
+      <div class="card">
+        <h2>手順</h2>
+        <ol class="sub" style="margin:0; padding-left:18px;">
+          <li>上の拡張 ID をコピー</li>
+          <li>ターミナルで <code>native/install.sh &lt;拡張ID&gt;</code> を実行（ビルド＋ホスト登録）</li>
+          <li>Chrome を再起動 → このページで下のボタンを試す</li>
+        </ol>
+      </div>
+
+      <div class="card">
+        <h2>テスト</h2>
+        <div class="row">
+          <button id="btn-status">状態確認 (status)</button>
+          <button id="btn-enroll" class="primary">登録 (enroll)</button>
+          <button id="btn-unlock" class="primary">Touch IDで取得 (unlock)</button>
+          <button id="btn-unlock2">もう一度取得</button>
+          <button id="btn-reset">登録解除 (reset)</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>ログ</h2>
+        <pre id="log"></pre>
+      </div>
+    </main>
+    <script type="module" src="native-test.js"></script>
+  </body>
+</html>

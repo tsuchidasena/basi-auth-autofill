@@ -1,0 +1,9 @@
+{
+  "name": "com.tsuchida.basic_auth_autofill",
+  "description": "Basic Auth Autofill — Touch ID bridge",
+  "path": "__BINARY_PATH__",
+  "type": "stdio",
+  "allowed_origins": [
+    "chrome-extension://__EXTENSION_ID__/"
+  ]
+}
