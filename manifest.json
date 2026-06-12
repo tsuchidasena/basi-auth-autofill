@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Basic Auth Autofill",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "HTTP Basic 認証のネイティブダイアログに、暗号化保存した資格情報を自動入力します。",
   "minimum_chrome_version": "108",
   "permissions": [
