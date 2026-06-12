@@ -7,6 +7,9 @@ import {
   getEntries,
   saveEntries,
   resetVault,
+  isBioEnabled,
+  enableBio,
+  disableBio,
 } from "./vault.js";
 
 const $ = (id) => document.getElementById(id);
@@ -44,6 +47,16 @@ async function render() {
     return;
   }
   await renderEntries();
+  await renderBio();
+}
+
+async function renderBio() {
+  const on = await isBioEnabled();
+  $("bio-enable").hidden = on;
+  $("bio-disable").hidden = !on;
+  $("bio-note").textContent = on
+    ? "有効です。ブラウザ起動後、ポップアップから Touch ID で解錠できます。"
+    : "有効にすると、マスターパスワードの代わりに Touch ID で解錠できます。※鍵はこのMacのキーチェーンに保存され、ハードウェア保護ではありません（利便性向けの機能です）。";
 }
 
 function configureGate({ title, hint, confirm, btn }) {
@@ -182,6 +195,26 @@ $("reset-btn").addEventListener("click", async () => {
   await resetVault();
   resetForm();
   await render();
+});
+
+// --- Touch ID ---
+$("bio-enable").addEventListener("click", async () => {
+  msg($("bio-msg"), "Touch ID を確認中…");
+  try {
+    await enableBio();
+    msg($("bio-msg"), "有効化しました。", true);
+  } catch (e) {
+    const hint = /native|host/i.test(e.message)
+      ? "（native/install.sh を実行し Chrome を再起動したか確認してください）"
+      : "";
+    msg($("bio-msg"), "失敗: " + e.message + hint);
+  }
+  await renderBio();
+});
+$("bio-disable").addEventListener("click", async () => {
+  await disableBio();
+  msg($("bio-msg"), "無効化しました。", true);
+  await renderBio();
 });
 
 render();

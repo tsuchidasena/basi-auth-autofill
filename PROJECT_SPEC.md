@@ -64,7 +64,29 @@ Chrome 拡張機能で `chrome.webRequest.onAuthRequired` をフックし、
 - マスターパスワードを忘れると復号不可（リセット＝全データ削除）。
 - content script からは触れない（TRUSTED_CONTEXTS のみ）。
 
+## Touch ID 解錠（追加機能 / 方式B）
+完全ローカルで Touch ID 解錠を行う（クラウド非依存）。検討の経緯：
+- WebAuthn PRF は不可：Apple ID 禁止で iCloud Keychain 不可、Chrome プロファイル authenticator は `prf.enabled=false`、GPM も不可。
+- ハードウェア保護キーチェーン（SecAccessControl/Secure Enclave）は**有料 Apple Developer 署名が必須**（ad-hoc では `errSecMissingEntitlement` -34018）。
+- → **方式B**：Native Messaging で Swift ホストを起動し、`LAContext.evaluatePolicy` を Touch ID ゲートとして使用。32バイトの生体鍵は login キーチェーンに通常項目として保存。
+
+### エンベロープ構成
+```
+有効化(options/解錠済み): native enroll → Touch ID → 生体鍵K_bio
+                        → 金庫鍵(session)をK_bioで暗号化 → storage.local: bioWrap
+解錠(popup→background): native unlock → Touch ID → K_bio
+                        → bioWrap復号 → 金庫鍵 → storage.session
+```
+- マスターパスワードは独立した解錠＆リカバリ経路として併存。
+- 生体解錠は **background service worker 経由**で実行（OSプロンプトでポップアップが閉じても解錠は完走）。
+- 生体鍵が変わった（再 enroll）場合は復号失敗 → `bioWrap` 破棄しマスターPWでの再有効化を促す。
+- 構成要素：`native/`（Swift ホスト, build.sh, install.sh, host-manifest テンプレート）, `src/native.js`。
+
+### セキュリティ上の割り切り（方式B）
+鍵が login キーチェーン上にあるため、**このユーザ権限でコード実行できる攻撃者は Touch ID を経ずに鍵を取得可能**（ソフトウェアゲート＝"security theater"）。at-rest 強度はマスターPWのみ運用に劣る。利便性レイヤーと位置づける。
+
 ## 非対象（今回のスコープ外）
 - プロキシ認証（`isProxy`）への自動供給（拡張余地として枠だけ用意）
 - 1Password 等外部マネージャ連携
 - 同期（chrome.storage.sync）
+- ハードウェア保護 Touch ID（方式A：有料 Apple Developer 署名が必要なため見送り）

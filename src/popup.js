@@ -7,6 +7,7 @@ import {
   getEntries,
   saveEntries,
   findCredentials,
+  isBioEnabled,
 } from "./vault.js";
 
 const $ = (id) => document.getElementById(id);
@@ -52,6 +53,7 @@ async function render() {
   if (!(await isUnlocked())) {
     setBadge("施錠中", "locked");
     show("locked");
+    $("bio-unlock-btn").hidden = !(await isBioEnabled());
     $("unlock-pw").focus();
     return;
   }
@@ -103,6 +105,19 @@ async function doUnlock() {
 $("unlock-btn").addEventListener("click", doUnlock);
 $("unlock-pw").addEventListener("keydown", (e) => {
   if (e.key === "Enter") doUnlock();
+});
+
+// --- Touch ID unlock (driven by the background service worker) ---
+$("bio-unlock-btn").addEventListener("click", async () => {
+  msg("Touch ID を確認中…");
+  try {
+    const resp = await chrome.runtime.sendMessage({ type: "BIO_UNLOCK" });
+    if (resp?.ok) await render();
+    else msg(resp?.error || "解錠に失敗しました。");
+  } catch {
+    // The popup may have closed when the OS prompt took focus; the background
+    // completes the unlock regardless. Reopening the popup shows it unlocked.
+  }
 });
 
 // --- quick add ---

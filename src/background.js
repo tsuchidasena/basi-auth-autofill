@@ -1,6 +1,17 @@
 // Service worker: intercept HTTP Basic auth and supply stored credentials.
 
-import { findCredentials } from "./vault.js";
+import { findCredentials, unlockWithBio } from "./vault.js";
+
+// Touch ID unlock is driven from the background so it completes even if the
+// popup closes when the macOS biometric prompt takes focus.
+chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  if (msg?.type === "BIO_UNLOCK") {
+    unlockWithBio()
+      .then(() => sendResponse({ ok: true }))
+      .catch((e) => sendResponse({ ok: false, error: e.message }));
+    return true; // keep the channel open for the async response
+  }
+});
 
 // Track how many times we've supplied creds per request, to avoid an infinite
 // loop when the stored password is wrong (onAuthRequired re-fires on rejection).

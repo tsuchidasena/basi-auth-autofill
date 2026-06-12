@@ -63,6 +63,9 @@ button:hover { background: #eef1f4; }
 button.primary { background: var(--primary); color: var(--primary-fg); border-color: var(--primary); width: 100%; }
 button.primary:hover { filter: brightness(0.95); }
 
+#view-locked button { width: 100%; margin-bottom: 8px; }
+#bio-divider { text-align: center; color: var(--muted); font-size: 11px; margin: 4px 0 10px; }
+
 .site-box {
   border: 1px solid var(--border);
   border-radius: 8px;

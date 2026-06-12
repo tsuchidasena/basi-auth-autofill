@@ -10,8 +10,10 @@ import {
   bufToB64,
   b64ToBuf,
 } from "./crypto.js";
+import { sendNative } from "./native.js";
 
 const LOCAL_VAULT = "vault"; // { salt, iv, ct } in storage.local
+const LOCAL_BIOWRAP = "bioWrap"; // { iv, ct } = vault key wrapped by the Touch ID key
 const SESSION_KEY = "sessionKey"; // base64 raw AES key in storage.session
 
 async function getRaw(area, key) {
@@ -81,8 +83,52 @@ export async function saveEntries(entries) {
 
 // Delete everything (used by "reset" when the master password is forgotten).
 export async function resetVault() {
-  await chrome.storage.local.remove(LOCAL_VAULT);
+  await chrome.storage.local.remove([LOCAL_VAULT, LOCAL_BIOWRAP]);
   await chrome.storage.session.remove(SESSION_KEY);
+  await sendNative({ cmd: "reset" }).catch(() => {});
+}
+
+// --- Touch ID (Native Messaging) biometric unlock -------------------------
+// Envelope design: the vault key (master-password-derived) is wrapped by a
+// 32-byte key held behind Touch ID in the native host. Master password stays
+// as the independent recovery path.
+
+export async function isBioEnabled() {
+  return !!(await getRaw("local", LOCAL_BIOWRAP));
+}
+
+// Enroll Touch ID and wrap the current vault key. Requires the vault unlocked.
+export async function enableBio() {
+  const sessionB64 = await getRaw("session", SESSION_KEY);
+  if (!sessionB64) throw new Error("LOCKED");
+  const resp = await sendNative({ cmd: "enroll" });
+  if (!resp || resp.ok === false) throw new Error(resp?.error || "Touch ID 登録に失敗");
+  const bioKey = await importKeyB64(resp.key);
+  const wrap = await encryptJSON(bioKey, { v: sessionB64 });
+  await chrome.storage.local.set({ [LOCAL_BIOWRAP]: wrap });
+}
+
+export async function disableBio() {
+  await sendNative({ cmd: "reset" }).catch(() => {});
+  await chrome.storage.local.remove(LOCAL_BIOWRAP);
+}
+
+// Unlock via Touch ID: native returns the bio key; unwrap the vault key into session.
+export async function unlockWithBio() {
+  const wrap = await getRaw("local", LOCAL_BIOWRAP);
+  if (!wrap) throw new Error("BIO_NOT_ENABLED");
+  const resp = await sendNative({ cmd: "unlock" });
+  if (!resp || resp.ok === false) throw new Error(resp?.error || "Touch ID 認証に失敗");
+  const bioKey = await importKeyB64(resp.key);
+  let data;
+  try {
+    data = await decryptJSON(bioKey, wrap);
+  } catch {
+    // The native key changed (re-enrolled). Re-enable with the master password.
+    await chrome.storage.local.remove(LOCAL_BIOWRAP);
+    throw new Error("BIO_KEY_MISMATCH");
+  }
+  await chrome.storage.session.set({ [SESSION_KEY]: data.v });
 }
 
 // Match an entry host pattern against a request host ("host" includes port if non-default).
