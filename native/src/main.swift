@@ -1,17 +1,23 @@
-// Basic Auth Autofill — native messaging host
+// Basic Auth Autofill — native messaging host (approach B: LAContext gate)
 //
-// Bridges the Chrome extension to macOS Touch ID via LocalAuthentication +
-// Keychain. Holds a random 32-byte "biometric key" in the login keychain,
-// access-controlled so that reading it requires Touch ID (or device passcode).
+// macOS Touch ID bridge for the Chrome extension. Because hardware-gated
+// Keychain items (SecAccessControl / Secure Enclave) require a paid Apple
+// Developer signing + provisioning profile, this build uses a software gate:
+//   - Touch ID is enforced via LAContext.evaluatePolicy before releasing the key.
+//   - The 32-byte "biometric key" itself is stored as an ordinary generic
+//     password in the login keychain (no entitlement required).
+// Trade-off: the key lives on disk (login keychain), so a local attacker running
+// as this user could read it without Touch ID. The master password remains the
+// strong recovery path; biometric unlock is a convenience layer.
 //
-// Protocol: Chrome native messaging (4-byte LE length prefix + JSON body) over
+// Protocol: Chrome native messaging (4-byte LE length prefix + JSON) over
 // stdin/stdout. One request -> one response. Loops until stdin EOF.
 //
-// Commands (JSON {"cmd": "..."}):
+// Commands ({"cmd": "..."}):
 //   status  -> {ok, enrolled}
-//   enroll  -> {ok, key}        // generates + stores key, returns it once (base64)
-//   unlock  -> {ok, key}        // Touch ID, then returns the stored key (base64)
-//   reset   -> {ok}             // deletes the stored key
+//   enroll  -> {ok, key}   // Touch ID, then generate+store key, return it (base64)
+//   unlock  -> {ok, key}   // Touch ID, then return stored key (base64)
+//   reset   -> {ok}        // delete stored key
 // Errors  -> {ok:false, error, code?}
 
 import Foundation
@@ -50,87 +56,92 @@ func writeMessage(_ obj: [String: Any]) {
     FileHandle.standardOutput.write(data)
 }
 
-// MARK: - Keychain
+// MARK: - Touch ID gate
 
-func deleteKey() -> OSStatus {
-    let q: [String: Any] = [
+func authenticate() -> (ok: Bool, error: String?) {
+    let ctx = LAContext()
+    ctx.localizedReason = REASON
+    var policyError: NSError?
+    // .deviceOwnerAuthentication = Touch ID, with device password as fallback.
+    guard ctx.canEvaluatePolicy(.deviceOwnerAuthentication, error: &policyError) else {
+        return (false, "生体認証が利用できません: \(policyError?.localizedDescription ?? "unknown")")
+    }
+    let sem = DispatchSemaphore(value: 0)
+    var ok = false
+    var message: String?
+    ctx.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: REASON) { success, error in
+        ok = success
+        if let e = error { message = e.localizedDescription }
+        sem.signal()
+    }
+    sem.wait()
+    return (ok, message)
+}
+
+// MARK: - Keychain (ordinary generic password, login keychain)
+
+func baseQuery() -> [String: Any] {
+    [
         kSecClass as String: kSecClassGenericPassword,
         kSecAttrService as String: SERVICE,
         kSecAttrAccount as String: ACCOUNT,
     ]
-    return SecItemDelete(q as CFDictionary)
 }
 
+func deleteKey() -> OSStatus {
+    SecItemDelete(baseQuery() as CFDictionary)
+}
+
+func storeKey(_ keyData: Data) -> OSStatus {
+    _ = deleteKey()
+    var q = baseQuery()
+    q[kSecValueData as String] = keyData
+    return SecItemAdd(q as CFDictionary, nil)
+}
+
+func loadKey() -> (status: OSStatus, data: Data?) {
+    var q = baseQuery()
+    q[kSecReturnData as String] = true
+    q[kSecMatchLimit as String] = kSecMatchLimitOne
+    var out: CFTypeRef?
+    let st = SecItemCopyMatching(q as CFDictionary, &out)
+    return (st, out as? Data)
+}
+
+func isEnrolled() -> Bool {
+    var q = baseQuery()
+    q[kSecReturnAttributes as String] = true
+    return SecItemCopyMatching(q as CFDictionary, nil) == errSecSuccess
+}
+
+// MARK: - Commands
+
 func enroll() -> [String: Any] {
+    let auth = authenticate()
+    if !auth.ok { return ["ok": false, "error": auth.error ?? "認証に失敗しました"] }
+
     var bytes = [UInt8](repeating: 0, count: 32)
     guard SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes) == errSecSuccess else {
         return ["ok": false, "error": "乱数生成に失敗"]
     }
     let keyData = Data(bytes)
-
-    var acError: Unmanaged<CFError>?
-    guard let access = SecAccessControlCreateWithFlags(
-        kCFAllocatorDefault,
-        kSecAttrAccessibleWhenPasscodeSetThisDeviceOnly,
-        .userPresence, // Touch ID, with device passcode as fallback
-        &acError
-    ) else {
-        return ["ok": false, "error": "アクセス制御の作成に失敗"]
-    }
-
-    _ = deleteKey() // replace any existing enrollment
-
-    let addQuery: [String: Any] = [
-        kSecClass as String: kSecClassGenericPassword,
-        kSecAttrService as String: SERVICE,
-        kSecAttrAccount as String: ACCOUNT,
-        kSecValueData as String: keyData,
-        kSecAttrAccessControl as String: access,
-    ]
-    let status = SecItemAdd(addQuery as CFDictionary, nil)
-    if status != errSecSuccess {
-        return ["ok": false, "error": "キーチェーン保存に失敗", "code": Int(status)]
+    let st = storeKey(keyData)
+    if st != errSecSuccess {
+        return ["ok": false, "error": "キーチェーン保存に失敗", "code": Int(st)]
     }
     return ["ok": true, "key": keyData.base64EncodedString()]
 }
 
 func unlock() -> [String: Any] {
-    let context = LAContext()
-    context.localizedReason = REASON
-    let query: [String: Any] = [
-        kSecClass as String: kSecClassGenericPassword,
-        kSecAttrService as String: SERVICE,
-        kSecAttrAccount as String: ACCOUNT,
-        kSecMatchLimit as String: kSecMatchLimitOne,
-        kSecReturnData as String: true,
-        kSecUseAuthenticationContext as String: context,
-    ]
-    var out: CFTypeRef?
-    let status = SecItemCopyMatching(query as CFDictionary, &out)
-    if status == errSecSuccess, let data = out as? Data {
+    if !isEnrolled() { return ["ok": false, "error": "未登録です", "code": Int(errSecItemNotFound)] }
+    let auth = authenticate()
+    if !auth.ok { return ["ok": false, "error": auth.error ?? "認証に失敗しました"] }
+
+    let result = loadKey()
+    if result.status == errSecSuccess, let data = result.data {
         return ["ok": true, "key": data.base64EncodedString()]
     }
-    if status == errSecItemNotFound {
-        return ["ok": false, "error": "未登録です", "code": Int(status)]
-    }
-    if status == errSecUserCanceled || status == errSecAuthFailed {
-        return ["ok": false, "error": "認証がキャンセル/失敗しました", "code": Int(status)]
-    }
-    return ["ok": false, "error": "解錠に失敗", "code": Int(status)]
-}
-
-func status() -> [String: Any] {
-    let query: [String: Any] = [
-        kSecClass as String: kSecClassGenericPassword,
-        kSecAttrService as String: SERVICE,
-        kSecAttrAccount as String: ACCOUNT,
-        kSecReturnAttributes as String: true,
-        kSecUseAuthenticationUI as String: kSecUseAuthenticationUISkip,
-    ]
-    let st = SecItemCopyMatching(query as CFDictionary, nil)
-    // Item present but gated by biometrics => errSecInteractionNotAllowed.
-    let enrolled = (st == errSecSuccess || st == errSecInteractionNotAllowed)
-    return ["ok": true, "enrolled": enrolled]
+    return ["ok": false, "error": "鍵の読み出しに失敗", "code": Int(result.status)]
 }
 
 // MARK: - Main loop
@@ -139,9 +150,12 @@ while let msg = readMessage() {
     let cmd = msg["cmd"] as? String ?? ""
     let response: [String: Any]
     switch cmd {
-    case "status": response = status()
-    case "enroll": response = enroll()
-    case "unlock": response = unlock()
+    case "status":
+        response = ["ok": true, "enrolled": isEnrolled()]
+    case "enroll":
+        response = enroll()
+    case "unlock":
+        response = unlock()
     case "reset":
         let st = deleteKey()
         response = (st == errSecSuccess || st == errSecItemNotFound)

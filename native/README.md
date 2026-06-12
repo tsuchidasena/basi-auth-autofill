@@ -3,11 +3,13 @@
 完全ローカルで Touch ID 解錠を行うためのネイティブ補助プログラム（macOS / Swift）。
 クラウド（Apple ID / Google アカウント）には一切依存しません。
 
-## 仕組み
-- ランダムな 32 バイトの「生体鍵」を **login キーチェーン**に保存。
-- そのキーチェーン項目は `SecAccessControl(.userPresence)` で保護され、**読み出しに Touch ID（または端末パスコード）が必要**。
-- Chrome 拡張は `chrome.runtime.sendNativeMessage` でこのホストと通信し、解錠時に Touch ID を経て鍵を受け取る。
-- 拡張はその鍵で「金庫の鍵」をアンラップする（マスターパスワードはリカバリ用に併存）。
+## 仕組み（方式B: LAContext ゲート）
+- ランダムな 32 バイトの「生体鍵」を **login キーチェーン**に通常の generic password として保存。
+- 解錠時、ホストが `LAContext.evaluatePolicy(.deviceOwnerAuthentication)` で **Touch ID（端末パスコードにフォールバック可）** を要求し、成功した場合のみ鍵を返す。
+- Chrome 拡張は `chrome.runtime.sendNativeMessage` でこのホストと通信し、受け取った鍵で「金庫の鍵」をアンラップする（マスターパスワードはリカバリ用に併存）。
+
+### セキュリティ上の注意（重要）
+ハードウェア保護つきキーチェーン（`SecAccessControl` / Secure Enclave）は **有料 Apple Developer の署名＋プロビジョニングプロファイルが必須**で、ad-hoc 署名では使えません（`errSecMissingEntitlement` / -34018）。本方式は Touch ID を**ソフトウェア的なゲート**として使い、鍵自体は login キーチェーンに置きます。そのため、**このユーザ権限でコード実行できる攻撃者は Touch ID を経ずに鍵を取り出せます**（"security theater"）。マスターパスワード解錠の強度（秘密が頭の中だけ）には及びません。利便性レイヤーと割り切って使ってください。
 
 ## 必要なもの
 - macOS + Touch ID 搭載 Mac
