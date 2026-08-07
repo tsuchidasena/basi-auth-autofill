@@ -48,6 +48,22 @@ node tools/ext-id.js      # manifest.json の key から拡張 ID を算出
 - コミットメッセージ本文は日本語、1行目は英語の要約でよい（既存履歴に合わせる）
 - 秘密鍵（`manifest.json` の `key` に対応する `.pem`）は**repo 外**に置く。`.gitignore` に頼らない
 
+## バージョニング（必須）
+
+**コードに手を入れたコミットでは必ず `manifest.json` の `version` を patch +1 する。**
+`chrome://extensions` の表示がそのまま「いま読み込まれているのがどのビルドか」の唯一の手がかりで、
+これが動かないと再読み込みが効いたのか判断できない。
+
+```jsonc
+"version": "0.2.7",                     // 作業ごとに patch +1
+"version_name": "0.2.7 — T-009 バッジ/通知"  // 何が入ったビルドか
+```
+
+- `version_name` は `chrome://extensions` で `version` の代わりに表示される。直近のタスク ID を入れる
+- `package.json` の `version` も同じ値に揃える（食い違うと後で必ず迷う）
+- ドキュメントだけの変更（README・docs/・.claude/）では上げなくてよい
+- リリース時（T-012）に `version` を `0.3.0` に上げ、`version_name` は削除する
+
 ## 拡張 ID と秘密鍵
 
 `manifest.json` の `key` により **ID はパスに依存せず固定**（v0.3.0 で導入）。
