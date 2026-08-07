@@ -5,6 +5,7 @@
 // --test` exercise the merge and crypto paths directly.
 
 import { deriveKey, encryptJSON, decryptJSON, bufToB64, b64ToBuf } from "./crypto.js";
+import { normalizeHost } from "./host.js";
 
 // Stamped into every file so a JSON that happens to be lying around cannot be
 // mistaken for one of ours.
@@ -16,7 +17,9 @@ export const EXPORT_VERSION = 1;
 // in it drops anything a hand-edited file tries to smuggle in.
 function pickEntry(e) {
   return {
-    host: e.host,
+    // Normalise on the way through: a file can carry a pasted URL as its host,
+    // whether it was hand-edited or exported by a pre-0.3.2 build.
+    host: normalizeHost(e.host),
     username: e.username,
     password: e.password ?? "",
     label: e.label ?? "",

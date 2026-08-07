@@ -36,6 +36,7 @@ Node のツールチェーンは**開発時のみ**で、配布物には一切�
 extension/            ← Chrome が読むのはここだけ（v0.3.1 で分離）
   manifest.json
   src/crypto.js       WebCrypto ラッパ。chrome.* に依存しない
+  src/host.js         host の正規化と照合。chrome.* に依存しない
   src/transfer.js     エクスポート/インポートの純粋ロジック。chrome.* に依存しない
   src/vault.js        金庫。chrome.storage と native に依存
   src/native.js       Native Messaging ラッパ

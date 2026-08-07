@@ -11,6 +11,7 @@ import {
   enableBio,
   disableBio,
 } from "./vault.js";
+import { normalizeHost } from "./host.js";
 import {
   buildEncryptedExport,
   buildPlainExport,
@@ -389,7 +390,7 @@ $("gate-pw").addEventListener("keydown", (e) => {
 
 // --- entry form ---
 $("f-save").addEventListener("click", async () => {
-  const host = $("f-host").value.trim();
+  const host = normalizeHost($("f-host").value);
   const username = $("f-user").value;
   const password = $("f-pass").value;
   const label = $("f-label").value.trim();
@@ -413,6 +414,12 @@ $("f-save").addEventListener("click", async () => {
   msg($("form-msg"), "保存しました。", true);
 });
 $("f-cancel").addEventListener("click", resetForm);
+// Normalise as soon as focus leaves, so a pasted URL visibly becomes the host
+// that will actually be matched instead of silently changing on save.
+$("f-host").addEventListener("blur", () => {
+  const cleaned = normalizeHost($("f-host").value);
+  if (cleaned !== $("f-host").value) $("f-host").value = cleaned;
+});
 
 // --- export / import ---
 $("pick-all").addEventListener("change", (e) => {

@@ -9,6 +9,7 @@ import {
   findCredentials,
   isBioEnabled,
 } from "./vault.js";
+import { normalizeHost } from "./host.js";
 
 const $ = (id) => document.getElementById(id);
 const views = {
@@ -125,7 +126,7 @@ $("bio-unlock-btn").addEventListener("click", async () => {
 
 // --- quick add ---
 $("qa-save").addEventListener("click", async () => {
-  const host = $("qa-host").value.trim();
+  const host = normalizeHost($("qa-host").value);
   const username = $("qa-user").value;
   const password = $("qa-pass").value;
   if (!host || !username) return msg("host とユーザ名は必須です。");
