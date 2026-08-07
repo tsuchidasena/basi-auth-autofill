@@ -1,0 +1,15 @@
+{
+  "name": "basic-auth-autofill",
+  "version": "0.3.0",
+  "private": true,
+  "type": "module",
+  "description": "Chrome extension that autofills HTTP Basic auth credentials from an encrypted vault.",
+  "scripts": {
+    "lint": "eslint .",
+    "test": "node --test test/"
+  },
+  "devDependencies": {
+    "eslint": "^9.39.0",
+    "globals": "17.8.0"
+  }
+}

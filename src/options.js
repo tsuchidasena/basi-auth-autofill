@@ -170,7 +170,7 @@ $("f-save").addEventListener("click", async () => {
   const entry = { host, username, password, label };
 
   // If host changed during edit, drop the old key.
-  let next = editingHost && editingHost !== host
+  const next = editingHost && editingHost !== host
     ? entries.filter((e) => e.host !== editingHost)
     : entries.slice();
 
