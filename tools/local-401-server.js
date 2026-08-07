@@ -19,9 +19,26 @@ const at = () => `${String(Date.now() - started).padStart(7)}ms`;
 
 let seq = 0;
 
+// A page whose subresources each need auth. Opening this is how you check that
+// concurrent onAuthRequired events raise ONE Touch ID prompt and not five.
+const MULTI_PAGE = `<!doctype html>
+<meta charset="utf-8"><title>401 x5</title>
+<h1>5 protected subresources</h1>
+<p>Each image below is a separate 401. Exactly one Touch ID prompt should appear.</p>
+${[1, 2, 3, 4, 5].map((i) => `<img src="/sub${i}.png" alt="sub${i}" width="80" height="80">`).join("\n")}
+`;
+
 createServer((req, res) => {
   const n = ++seq;
   const auth = req.headers.authorization;
+
+  // The harness page itself is open; only its subresources are protected.
+  if (req.url === "/multi") {
+    console.log(`${at()}  #${n} ${req.method} ${req.url} -> 200 (harness page)`);
+    res.writeHead(200, { "Cache-Control": "no-store", "Content-Type": "text/html; charset=utf-8" });
+    res.end(MULTI_PAGE);
+    return;
+  }
 
   if (!auth) {
     // Unique realm per request so Chrome cannot reuse a cached credential.
@@ -48,6 +65,8 @@ createServer((req, res) => {
   res.end(JSON.stringify({ authenticated: ok, user }, null, 2) + "\n");
 }).listen(PORT, () => {
   console.log(`Local 401 server on http://localhost:${PORT}/  (${USER} / ${PASS})`);
+  console.log(`  /        single protected request`);
+  console.log(`  /multi   page with 5 protected subresources (single-flight check)`);
   console.log("Every 401 uses a fresh realm, so you can re-run without restarting Chrome.");
   console.log("Ctrl-C to stop.\n");
 });
