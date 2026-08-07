@@ -8,6 +8,7 @@ import {
   saveEntries,
   findCredentials,
   isBioEnabled,
+  isNativeHostInstalled,
 } from "./vault.js";
 import { normalizeHost } from "./host.js";
 
@@ -130,8 +131,19 @@ $("setup-btn").addEventListener("click", async () => {
   if (pw.length < 8) return msg("マスターパスワードは8文字以上にしてください。");
   if (pw !== pw2) return msg("確認用パスワードが一致しません。");
   await initVault(pw);
-  msg("設定しました。", true);
   await render();
+
+  // Point at Touch ID while setup is still on the user's mind. The guidance
+  // itself lives in the options page — this popup is too small to carry a
+  // terminal command, and the setup is a once-ever step.
+  const { os } = await chrome.runtime.getPlatformInfo();
+  const needsHost = os === "mac" && !(await isNativeHostInstalled());
+  msg(
+    needsHost
+      ? "設定しました。Touch ID 解錠も使えます —「すべての登録を管理」から設定してください。"
+      : "設定しました。",
+    true
+  );
 });
 
 // --- unlock ---

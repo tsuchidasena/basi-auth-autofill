@@ -10,6 +10,7 @@ import {
   isBioEnabled,
   enableBio,
   disableBio,
+  isNativeHostInstalled,
 } from "./vault.js";
 import { normalizeHost } from "./host.js";
 import {
@@ -73,12 +74,24 @@ function onMac() {
   return macCheck;
 }
 
+const INSTALL_COMMAND = "./native/install.sh";
+
 async function renderBio() {
   if (!(await onMac())) {
     $("bio-card").hidden = true;
     return;
   }
   $("bio-card").hidden = false;
+  $("bio-cmd").textContent = INSTALL_COMMAND;
+
+  // Three states, not two: "the host was never installed" used to look
+  // identical to "enrolment failed", and the error it produced
+  // (Specified native messaging host not found) reads as a broken install
+  // rather than a step nobody has taken yet.
+  const installed = await isNativeHostInstalled();
+  $("bio-setup").hidden = installed;
+  $("bio-ready").hidden = !installed;
+  if (!installed) return;
 
   const on = await isBioEnabled();
   $("bio-enable").hidden = on;
@@ -479,6 +492,27 @@ $("reset-btn").addEventListener("click", async () => {
   await resetVault();
   resetForm();
   await render();
+});
+
+// --- Touch ID setup guidance ---
+$("bio-copy").addEventListener("click", async () => {
+  await navigator.clipboard.writeText(INSTALL_COMMAND);
+  msg($("bio-setup-msg"), "コピーしました。ターミナルに貼り付けて実行してください。", true);
+});
+
+$("bio-check").addEventListener("click", async () => {
+  msg($("bio-setup-msg"), "確認しています…");
+  if (await isNativeHostInstalled()) {
+    msg($("bio-setup-msg"), "見つかりました。有効化に進めます。", true);
+    await renderBio();
+    return;
+  }
+  // Naming the restart matters: it is the step people skip, and without it the
+  // host stays invisible no matter how many times the command was run.
+  msg(
+    $("bio-setup-msg"),
+    "まだ見つかりません。コマンドを実行したあと、Chrome の再起動が必要な場合があります。"
+  );
 });
 
 // --- Touch ID ---

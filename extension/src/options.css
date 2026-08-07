@@ -95,3 +95,17 @@ th.pick input, td.pick input { width: auto; margin: 0; vertical-align: middle; }
 #im-conflicts td { font-size: 12px; }
 #im-conflicts .row { margin-top: 12px; }
 td.cmp { color: var(--muted); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; word-break: break-all; }
+
+.cmd-row { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; }
+.cmd-row code {
+  flex: 1;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  background: #f6f8fa;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+.cmd-row button { white-space: nowrap; }
