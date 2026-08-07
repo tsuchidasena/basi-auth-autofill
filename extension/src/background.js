@@ -155,6 +155,7 @@ chrome.storage.onChanged.addListener(async (changes, area) => {
 // offer that did not. Recomputing at startup means a stale hint clears itself
 // instead of pointing at something that is no longer there.
 refreshBadge();
+console.log("[F-08] service worker started");
 
 chrome.webRequest.onAuthRequired.addListener(
   (details, asyncCallback) => {
@@ -201,7 +202,10 @@ async function handleAuth(details) {
   }
 
   if (cred) attempted.set(details.requestId, prev + 1);
-  else watching.add(host); // we left this one to the dialog — watch what gets typed
+  else {
+    watching.add(host); // we left this one to the dialog — watch what gets typed
+    console.log(`[F-08] watching ${host} (req=${details.requestId})`);
+  }
   return cred;
 }
 
@@ -222,8 +226,16 @@ chrome.webRequest.onBeforeSendHeaders.addListener(
     if (!watching.has(host)) return; // only hosts whose 401 we could not answer
 
     const header = details.requestHeaders?.find((h) => h.name.toLowerCase() === "authorization");
+    console.log(
+      `[F-08] headers for watched ${host} (req=${details.requestId}) — Authorization: ${header ? "present" : "ABSENT"}`
+    );
     const cred = header && parseBasicAuth(header.value);
-    if (cred) pending.set(details.requestId, { host, ...cred });
+    if (cred) {
+      pending.set(details.requestId, { host, ...cred });
+      console.log(`[F-08] captured ${cred.username} for ${host}`);
+    } else if (header) {
+      console.log(`[F-08] Authorization present but not usable Basic: ${header.value.slice(0, 12)}…`);
+    }
   },
   { urls: ["<all_urls>"] },
   ["requestHeaders", "extraHeaders"]
@@ -237,19 +249,23 @@ async function isDismissed(host) {
 // Only offer once the server has actually accepted the credential. A 401 here
 // means the user mistyped, and mistypes are not worth remembering.
 async function considerOffer(observed) {
-  if (await isDismissed(observed.host)) return;
+  if (await isDismissed(observed.host)) {
+    console.log(`[F-08] not offering ${observed.host}: dismissed this session`);
+    return;
+  }
   try {
     const entries = await getEntries();
     const kind = classifySuggestion(entries, observed.host, observed.username, observed.password);
+    console.log(`[F-08] classify ${observed.host} -> ${kind}`);
     if (kind === "same") return; // already stored exactly; stay quiet
-  } catch {
-    // Locked, so we cannot classify yet. Hold the offer and decide when the
-    // popup asks — which cannot happen before an unlock anyway.
+  } catch (e) {
+    console.log(`[F-08] locked while classifying (${e.message}); holding the offer`);
   }
 
   suggestion = observed;
   watching.delete(observed.host);
   await refreshBadge();
+  console.log(`[F-08] OFFERING ${observed.host} — badge should now show +`);
   chrome.notifications.create(SUGGEST_NOTIFICATION_ID, {
     type: "basic",
     iconUrl: "/icons/icon-128.png",
@@ -357,7 +373,9 @@ chrome.webRequest.onCompleted.addListener(
     const observed = pending.get(d.requestId);
     if (!observed) return;
     pending.delete(d.requestId);
+    console.log(`[F-08] completed req=${d.requestId} status=${d.statusCode} for ${observed.host}`);
     if (d.statusCode >= 200 && d.statusCode < 300) considerOffer(observed);
+    else console.log(`[F-08] dropping: not 2xx`);
   },
   { urls: ["<all_urls>"] }
 );
