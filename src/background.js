@@ -13,12 +13,50 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   }
 });
 
+// ===== TEMPORARY: T-001 spike — remove before implementing F-04 ============
+// Measures how long Chrome will wait for an asyncBlocking onAuthRequired
+// callback before giving up and showing its own dialog. That ceiling sets
+// BIO_TIMEOUT_MS in docs/DESIGN.md; if it is very short, the hold-the-request
+// design for F-04 does not work at all and has to go back to the spec.
+//
+// Also watches for the MV3 service worker being torn down mid-hold, which
+// would cap the wait regardless of what webRequest itself allows.
+const SPIKE_HOST = "httpbin.org";
+const SPIKE_HOLD_MS = 180_000;
+const SPIKE_BOOT = Date.now();
+console.log(`[T-001] service worker started @ ${new Date(SPIKE_BOOT).toISOString()}`);
+
+function runSpike(details, asyncCallback) {
+  const t0 = Date.now();
+  const at = () => `${Date.now() - t0}ms`;
+  console.log(`[T-001] onAuthRequired req=${details.requestId} url=${details.url}`);
+  console.log(`[T-001] holding the callback for up to ${SPIKE_HOLD_MS}ms — watch for the dialog`);
+
+  const tick = setInterval(() => console.log(`[T-001] still holding: ${at()}`), 5000);
+
+  setTimeout(() => {
+    clearInterval(tick);
+    console.log(`[T-001] releasing callback at ${at()}`);
+    try {
+      asyncCallback({ authCredentials: { username: "user", password: "passwd" } });
+      console.log(`[T-001] asyncCallback returned without throwing at ${at()}`);
+    } catch (e) {
+      console.log(`[T-001] asyncCallback THREW at ${at()}: ${e.message}`);
+    }
+  }, SPIKE_HOLD_MS);
+}
+// ===== end T-001 spike =====================================================
+
 // Track how many times we've supplied creds per request, to avoid an infinite
 // loop when the stored password is wrong (onAuthRequired re-fires on rejection).
 const attempted = new Map(); // requestId -> count
 
 chrome.webRequest.onAuthRequired.addListener(
   (details, asyncCallback) => {
+    if (!details.isProxy && details.url.includes(SPIKE_HOST)) {
+      runSpike(details, asyncCallback);
+      return;
+    }
     handleAuth(details)
       .then((cred) => {
         if (cred) asyncCallback({ authCredentials: cred });
@@ -64,3 +102,14 @@ async function handleAuth(details) {
 const cleanup = (d) => attempted.delete(d.requestId);
 chrome.webRequest.onCompleted.addListener(cleanup, { urls: ["<all_urls>"] });
 chrome.webRequest.onErrorOccurred.addListener(cleanup, { urls: ["<all_urls>"] });
+
+// ===== TEMPORARY: T-001 spike — remove with the block above ================
+chrome.webRequest.onCompleted.addListener(
+  (d) => console.log(`[T-001] onCompleted req=${d.requestId} status=${d.statusCode} @ ${Date.now() - SPIKE_BOOT}ms since boot`),
+  { urls: [`*://${SPIKE_HOST}/*`] }
+);
+chrome.webRequest.onErrorOccurred.addListener(
+  (d) => console.log(`[T-001] onErrorOccurred req=${d.requestId} error=${d.error} @ ${Date.now() - SPIKE_BOOT}ms since boot`),
+  { urls: [`*://${SPIKE_HOST}/*`] }
+);
+// ===== end T-001 spike =====================================================
