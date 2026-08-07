@@ -48,6 +48,19 @@ node tools/ext-id.js      # manifest.json の key から拡張 ID を算出
 - コミットメッセージ本文は日本語、1行目は英語の要約でよい（既存履歴に合わせる）
 - 秘密鍵（`manifest.json` の `key` に対応する `.pem`）は**repo 外**に置く。`.gitignore` に頼らない
 
+## 拡張 ID と秘密鍵
+
+`manifest.json` の `key` により **ID はパスに依存せず固定**（v0.3.0 で導入）。
+
+```
+拡張 ID : lddkfmdklnjalpkojbfajlkcgghidjhc
+秘密鍵  : ~/Developers/basic-auth-autofill-keys/extension-key.pem （repo 外・600）
+```
+
+`node tools/ext-id.js` で manifest から ID を再算出できる。
+ネイティブホストの登録は `./native/install.sh lddkfmdklnjalpkojbfajlkcgghidjhc`。
+秘密鍵は .crx 署名に切り替える場合にのみ必要。失うと ID を再現できないので消さない。
+
 ## 触るときに注意が要る場所
 
 - `src/background.js` の `onAuthRequired` — `asyncBlocking` のコールバックを保留する設計。

@@ -3,3 +3,6 @@ node_modules/
 *.zip
 native/bin/
 logs/
+
+# Signing keys never belong here (they live outside the repo) — belt and braces.
+*.pem
