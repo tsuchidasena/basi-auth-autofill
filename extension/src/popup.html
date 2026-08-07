@@ -30,6 +30,22 @@
 
     <!-- View: unlocked -->
     <section id="view-unlocked" hidden>
+      <!-- The password is deliberately not sent to this page; the background
+           holds it until "保存" is pressed. -->
+      <section id="suggestion" class="suggest" hidden>
+        <div class="suggest-title" id="sg-title"></div>
+        <dl class="suggest-facts">
+          <dt>Host</dt><dd id="sg-host"></dd>
+          <dt>ユーザ名</dt><dd id="sg-user"></dd>
+          <dt>パスワード</dt><dd>••••••••</dd>
+        </dl>
+        <input id="sg-label" type="text" placeholder="メモ（任意）" autocomplete="off" />
+        <div class="row">
+          <button id="sg-save" class="primary">保存</button>
+          <button id="sg-dismiss">今回は保存しない</button>
+        </div>
+      </section>
+
       <div class="site-box">
         <div class="site-label">現在のサイト</div>
         <div id="current-host" class="site-host">—</div>

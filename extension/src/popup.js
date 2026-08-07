@@ -63,6 +63,7 @@ async function render() {
   }
   setBadge("解錠済み", "unlocked");
   show("unlocked");
+  await renderSuggestion();
 
   const host = await currentTabHost();
   $("current-host").textContent = host || "（対象外のページ）";
@@ -82,6 +83,45 @@ async function render() {
     status.textContent = "";
   }
 }
+
+// --- suggestion (F-08) ---
+// The offer lives in the service worker; this page only ever learns the host,
+// the username and whether it is a new entry or an update. The password stays
+// on the other side of the message boundary.
+async function renderSuggestion() {
+  let resp = null;
+  try {
+    resp = await chrome.runtime.sendMessage({ type: "SUGGESTION_GET" });
+  } catch {
+    // Worker asleep or gone; nothing to offer.
+  }
+  const s = resp?.suggestion;
+  $("suggestion").hidden = !s;
+  if (!s) return;
+
+  $("sg-title").textContent =
+    s.kind === "update" ? "登録済みの資格情報を更新しますか？" : "この資格情報を保存しますか？";
+  $("sg-host").textContent = s.host;
+  $("sg-user").textContent = s.username;
+  $("sg-label").value = "";
+}
+
+$("sg-save").addEventListener("click", async () => {
+  const r = await chrome.runtime
+    .sendMessage({ type: "SUGGESTION_SAVE", label: $("sg-label").value.trim() })
+    .catch(() => null);
+  if (r?.ok) {
+    msg("保存しました。", true);
+    await render();
+  } else {
+    msg(r?.error ? "保存に失敗しました: " + r.error : "保存に失敗しました。");
+  }
+});
+
+$("sg-dismiss").addEventListener("click", async () => {
+  await chrome.runtime.sendMessage({ type: "SUGGESTION_DISMISS" }).catch(() => null);
+  await render();
+});
 
 // --- setup ---
 $("setup-btn").addEventListener("click", async () => {
