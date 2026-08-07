@@ -1,11 +1,11 @@
-// Local Basic-auth endpoint for the T-001 spike.
+// Local Basic-auth endpoint for manually exercising the extension.
 //
-// Why not httpbin.org: it is frequently down, and Chrome caches Basic auth per
+// Why not httpbin.org: it is unreliable, and Chrome caches Basic auth per
 // (host, realm) — so a second attempt never reaches onAuthRequired and you have
 // to restart the browser between runs. Here every 401 carries a fresh realm,
-// which defeats that cache and makes the measurement repeatable.
+// which defeats that cache and makes the test repeatable.
 //
-// Usage: node tools/spike-401-server.js   then open http://localhost:8765/
+// Usage: node tools/local-401-server.js   then open http://localhost:8765/
 // Credentials: user / passwd
 
 import { createServer } from "node:http";
@@ -25,7 +25,7 @@ createServer((req, res) => {
 
   if (!auth) {
     // Unique realm per request so Chrome cannot reuse a cached credential.
-    const realm = `t001-${Date.now()}-${n}`;
+    const realm = `local-${Date.now()}-${n}`;
     console.log(`${at()}  #${n} ${req.method} ${req.url} -> 401 (realm ${realm})`);
     res.writeHead(401, {
       "WWW-Authenticate": `Basic realm="${realm}"`,
@@ -47,7 +47,7 @@ createServer((req, res) => {
   });
   res.end(JSON.stringify({ authenticated: ok, user }, null, 2) + "\n");
 }).listen(PORT, () => {
-  console.log(`T-001 spike server on http://localhost:${PORT}/  (${USER} / ${PASS})`);
+  console.log(`Local 401 server on http://localhost:${PORT}/  (${USER} / ${PASS})`);
   console.log("Every 401 uses a fresh realm, so you can re-run without restarting Chrome.");
   console.log("Ctrl-C to stop.\n");
 });
