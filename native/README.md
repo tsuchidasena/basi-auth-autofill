@@ -16,15 +16,21 @@
 - Xcode Command Line Tools（`xcode-select --install` で `swiftc` が入る）
 
 ## セットアップ
-1. Chrome で拡張を unpacked 読み込みし、`chrome://extensions` の **拡張 ID** を控える
-   （検証ページにも表示されます）。
+1. Chrome で `extension/` を unpacked 読み込みしておく。
 2. ターミナルで：
    ```sh
-   ./native/install.sh <拡張ID>
+   ./native/install.sh
    ```
-   これがビルド（`build.sh`）とネイティブホスト manifest の設置を行います。
-3. Chrome を再起動（または拡張を再読み込み）。
-4. 検証ページ（拡張のオプション）で status → enroll → unlock を試す。
+   ビルド（`build.sh`）とネイティブホスト manifest の設置を行います。
+   **拡張 ID を調べる必要はありません** — `extension/manifest.json` の `key` から
+   算出します（`base64` / `shasum` / `tr` のみ。Node も Python も不要）。
+   別の ID を使いたい場合は引数で渡せます。
+3. **Chrome を再起動**。拡張の再読み込みだけでは反映されません。
+4. 拡張の設定画面 → 「Touch ID 解錠」→ 「確認」→ 「有効化」。
+
+拡張を通さず単体で切り分けたい場合は、検証ページ
+`chrome-extension://<拡張ID>/src/native-test.html` を直接開いて
+status → enroll → unlock を試せます（開発用。設定画面からは辿れません）。
 
 ## ホスト manifest の設置先
 ```
@@ -40,6 +46,7 @@
 | `reset` | 生体鍵を削除 | `{ok}` |
 
 ## トラブルシュート
-- **`Specified native messaging host not found`**: install.sh の拡張 ID が現在の ID と一致しているか、Chrome を再起動したか確認。
+- **`Specified native messaging host not found`**: `install.sh` を実行したか、そのあと
+  **Chrome を再起動**したか確認。ID は自動算出されるので、通常ずれることはありません。
 - **enroll は成功するが unlock でキーチェーンエラー**: ad-hoc 署名では生体保護項目が読めない環境がある。その場合は Developer ID で署名（`codesign -s "Developer ID Application: ..."`）するか、`build.sh` の署名行を調整。
 - **Touch ID が出ない**: `システム設定 > Touch ID とパスコード` を確認。

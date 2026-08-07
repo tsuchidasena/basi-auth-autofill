@@ -2,6 +2,8 @@
 
 対象バージョン: **v0.4.0（開発中）** — 出荷済みの最新は v0.3.2
 
+本書は「いまどうあるべきか」を書く。いつ何が入ったかは `RELEASE_NOTE.md` が持つ。
+
 ## 背景 / 課題
 HTTP **Basic 認証** はブラウザがネイティブのダイアログ（OS レベルのモーダル）を出すため、
 1Password などのパスワードマネージャの自動入力が効かない。毎回手入力が必要で手間。
@@ -45,7 +47,7 @@ Chrome の起動時読み込みが通らず**再起動のたびに拡張が消�
 | `extension/manifest.json` | MV3 マニフェスト。`webRequest` / `webRequestAuthProvider` / `storage` / `nativeMessaging` / `notifications` 権限、および ID 固定用の `key` |
 | `extension/src/crypto.js` | WebCrypto ラッパ（鍵導出・AES-GCM 暗号/復号・base64） |
 | `extension/src/vault.js` | 金庫ロジック（初期化・解錠/施錠・エントリ CRUD・資格情報検索・Touch ID） |
-| `extension/src/transfer.js` | エクスポート / インポート（ファイル生成・検証・マージ）※ v0.3.0 で追加 |
+| `extension/src/transfer.js` | エクスポート / インポート（ファイル生成・検証・マージ） |
 | `extension/src/native.js` | Native Messaging ラッパ |
 | `extension/src/background.js` | Service Worker。`onAuthRequired` をフックし資格情報を供給。Touch ID 自動解錠を駆動 |
 | `extension/src/popup.*` | ツールバーポップアップ（解錠/施錠・現在サイトのクイック登録） |
@@ -76,7 +78,7 @@ Chrome の起動時読み込みが通らず**再起動のたびに拡張が消�
 ### chrome.storage.session — `sessionKey`（メモリのみ・ブラウザ終了で消滅）
 解錠時に導出した AES 鍵を raw(base64) で保持。Service Worker が再起動しても解錠状態を維持。
 
-### エクスポートファイル（v0.3.0 で追加）
+### エクスポートファイル
 ```jsonc
 {
   "kind": "basic-auth-autofill-export",  // 種別マーカー
@@ -430,10 +432,6 @@ Basic 認証のかかった開発サーバで、古いレスポンスを掴ま�
   一緒にステージされているかを見る。**毎コミットでは止めない** — 空振りする警告は無視する習慣を
   作るだけで害になる。git hook は採らない（コミットは実質すべて Claude Code 経由で発火機会がなく、
   各自の `git config core.hooksPath` という手順が増える分だけ損）
-
-## `extension/manifest.json` への変更（v0.3.2 → v0.4.0）
-- `version`: `0.3.2` → `0.4.0`
-- `permissions`: F-10 で案 A を採る場合のみ `declarativeNetRequest` を追加
 
 # 非対象（スコープ外）
 
