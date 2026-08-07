@@ -21,8 +21,13 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 //
 // Also watches for the MV3 service worker being torn down mid-hold, which
 // would cap the wait regardless of what webRequest itself allows.
-const SPIKE_HOST = "httpbin.org";
-const SPIKE_HOLD_MS = 180_000;
+// Round 2: hold against the local server (tools/spike-401-server.js) at the
+// value we intend to ship, to prove credentials really do flow after a hold.
+// Round 1 against httpbin.org proved Chrome waits >180s and the SW survives,
+// but the origin returned 503 — it gave up first — so the 200 path is unproven.
+const SPIKE_HOST = "localhost:8765";
+const SPIKE_MATCH = "*://localhost/*"; // match patterns cannot carry a port
+const SPIKE_HOLD_MS = 15_000;
 const SPIKE_BOOT = Date.now();
 console.log(`[T-001] service worker started @ ${new Date(SPIKE_BOOT).toISOString()}`);
 
@@ -106,10 +111,10 @@ chrome.webRequest.onErrorOccurred.addListener(cleanup, { urls: ["<all_urls>"] })
 // ===== TEMPORARY: T-001 spike — remove with the block above ================
 chrome.webRequest.onCompleted.addListener(
   (d) => console.log(`[T-001] onCompleted req=${d.requestId} status=${d.statusCode} @ ${Date.now() - SPIKE_BOOT}ms since boot`),
-  { urls: [`*://${SPIKE_HOST}/*`] }
+  { urls: [SPIKE_MATCH] }
 );
 chrome.webRequest.onErrorOccurred.addListener(
   (d) => console.log(`[T-001] onErrorOccurred req=${d.requestId} error=${d.error} @ ${Date.now() - SPIKE_BOOT}ms since boot`),
-  { urls: [`*://${SPIKE_HOST}/*`] }
+  { urls: [SPIKE_MATCH] }
 );
 // ===== end T-001 spike =====================================================
