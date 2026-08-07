@@ -10,7 +10,7 @@
 
 import { createServer } from "node:http";
 
-const PORT = 8765;
+const PORT = Number(process.env.PORT) || 8765;
 const USER = "user";
 const PASS = "passwd";
 
@@ -40,30 +40,55 @@ createServer((req, res) => {
     return;
   }
 
-  if (!auth) {
-    // Unique realm per request so Chrome cannot reuse a cached credential.
+  // Chrome asks for a favicon on every navigation. Answering it without a
+  // challenge keeps the log readable.
+  if (req.url === "/favicon.ico") {
+    res.writeHead(204, { "Cache-Control": "no-store" });
+    res.end();
+    return;
+  }
+
+  // Wrong or absent credentials both get a 401 with a fresh realm.
+  //
+  // Returning 403 for a bad password (which this used to do) is what wedges the
+  // browser: 403 means "authenticated, but not allowed", so Chrome keeps the
+  // cached credential, never re-challenges, and onAuthRequired never fires
+  // again. Chrome also sends cached credentials pre-emptively on the same
+  // origin, so once a bad one is cached nothing can dislodge it — you just see
+  // an endless run of 403s. Only a 401 makes Chrome drop it and ask again.
+  const challenge = (why) => {
     const realm = `local-${Date.now()}-${n}`;
-    console.log(`${at()}  #${n} ${req.method} ${req.url} -> 401 (realm ${realm})`);
+    console.log(`${at()}  #${n} ${req.method} ${req.url} -> 401 ${why} (realm ${realm})`);
     res.writeHead(401, {
       "WWW-Authenticate": `Basic realm="${realm}"`,
       "Cache-Control": "no-store",
       "Content-Type": "text/plain; charset=utf-8",
     });
-    res.end("401 — waiting for credentials\n");
+    res.end(`401 — ${why}\n`);
+  };
+
+  if (!auth) {
+    challenge("no credentials");
     return;
   }
 
   const [, b64 = ""] = auth.split(" ");
-  const [user, pass] = Buffer.from(b64, "base64").toString("utf8").split(":");
-  const ok = user === USER && pass === PASS;
+  const [user, pass = ""] = Buffer.from(b64, "base64").toString("utf8").split(":");
 
-  console.log(`${at()}  #${n} ${req.method} ${req.url} -> ${ok ? 200 : 403} (got ${user}:${pass ? "***" : ""})`);
-  res.writeHead(ok ? 200 : 403, {
+  if (user !== USER || pass !== PASS) {
+    challenge(`rejected user=${JSON.stringify(user)} passLen=${pass.length} (want ${USER}/${PASS})`);
+    return;
+  }
+
+  console.log(`${at()}  #${n} ${req.method} ${req.url} -> 200 accepted (${user})`);
+  res.writeHead(200, {
     "Cache-Control": "no-store",
     "Content-Type": "application/json; charset=utf-8",
   });
-  res.end(JSON.stringify({ authenticated: ok, user }, null, 2) + "\n");
-}).listen(PORT, () => {
+  res.end(JSON.stringify({ authenticated: true, user }, null, 2) + "\n");
+// Loopback only — this thing hands out a known password, it has no business
+// being reachable from the network.
+}).listen(PORT, "127.0.0.1", () => {
   console.log(`Local 401 server on http://localhost:${PORT}/  (${USER} / ${PASS})`);
   console.log(`  /        single protected request`);
   console.log(`  /multi   page with 5 protected subresources (single-flight check)`);
