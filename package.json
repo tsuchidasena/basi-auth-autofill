@@ -6,7 +6,7 @@
   "description": "Chrome extension that autofills HTTP Basic auth credentials from an encrypted vault.",
   "scripts": {
     "lint": "eslint .",
-    "test": "node --test test/"
+    "test": "node --test \"test/**/*.test.js\""
   },
   "devDependencies": {
     "eslint": "^9.39.0",
