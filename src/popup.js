@@ -53,7 +53,10 @@ async function render() {
   if (!(await isUnlocked())) {
     setBadge("施錠中", "locked");
     show("locked");
-    $("bio-unlock-btn").hidden = !(await isBioEnabled());
+    // Touch ID needs a macOS-only native host; off a Mac the button could only
+    // ever fail, so it is not offered. See options.js for the reasoning.
+    const { os } = await chrome.runtime.getPlatformInfo();
+    $("bio-unlock-btn").hidden = os !== "mac" || !(await isBioEnabled());
     $("unlock-pw").focus();
     return;
   }

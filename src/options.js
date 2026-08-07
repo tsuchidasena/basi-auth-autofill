@@ -60,7 +60,25 @@ async function render() {
   await renderBio();
 }
 
+// Touch ID rides on a macOS-only native host. Elsewhere the buttons would fail
+// with "Specified native messaging host not found", which reads like a broken
+// install rather than an unsupported platform — so the section is not shown at
+// all. A "macOS only" note would invite the same misreading.
+// Memoise the promise, not the resolved value: assigning after an await would
+// let two concurrent callers both run the lookup.
+let macCheck = null;
+function onMac() {
+  macCheck ??= chrome.runtime.getPlatformInfo().then(({ os }) => os === "mac");
+  return macCheck;
+}
+
 async function renderBio() {
+  if (!(await onMac())) {
+    $("bio-card").hidden = true;
+    return;
+  }
+  $("bio-card").hidden = false;
+
   const on = await isBioEnabled();
   $("bio-enable").hidden = on;
   $("bio-disable").hidden = !on;

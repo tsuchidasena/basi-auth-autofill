@@ -124,7 +124,9 @@
           <p id="im-msg" class="msg" role="status"></p>
         </div>
 
-        <div class="card" id="bio-card">
+        <!-- Hidden until we know we are on macOS; see options.js. Starting
+             hidden avoids a flash of a section that will never work here. -->
+        <div class="card" id="bio-card" hidden>
           <h2>Touch ID 解錠（このMacのみ）</h2>
           <p class="hint" id="bio-note"></p>
           <div class="row">
