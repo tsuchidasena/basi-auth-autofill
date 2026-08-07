@@ -13,7 +13,7 @@ import { fileURLToPath } from "node:url";
 
 const manifestPath =
   process.argv[2] ??
-  join(dirname(fileURLToPath(import.meta.url)), "..", "manifest.json");
+  join(dirname(fileURLToPath(import.meta.url)), "..", "extension", "manifest.json");
 
 const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
 if (!manifest.key) {

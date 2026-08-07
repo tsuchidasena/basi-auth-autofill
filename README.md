@@ -34,7 +34,7 @@ HTTP **Basic 認証**（ブラウザが出すネイティブなユーザー名/�
 2. Chrome で `chrome://extensions` を開く
 3. 右上の **デベロッパーモード** をオン
 4. **パッケージ化されていない拡張機能を読み込む** をクリック
-5. クローンしたフォルダ（`manifest.json` がある場所）を選択
+5. クローンしたフォルダの中の **`extension/` フォルダ**を選択（リポジトリのルートではありません）
 6. ツールバーにアイコンが出れば完了。固定しておくと便利です
 
 > 💡 拡張 ID は `manifest.json` の `key` で固定されています。**フォルダをどこに置いても
@@ -43,6 +43,10 @@ HTTP **Basic 認証**（ブラウザが出すネイティブなユーザー名/�
 > ```
 > lddkfmdklnjalpkojbfajlkcgghidjhc
 > ```
+>
+> 💡 Chrome に渡すのは **`extension/` だけ**です。リポジトリのルートには開発用のファイル
+> （`node_modules/` など）が入っており、これを読み込ませると
+> **Chrome を再起動するたびに拡張が消えます**。
 >
 > ただし保存データは**プロファイルごと**です。別の Mac や別の Chrome プロファイルに
 > 移すときは、下記のエクスポート / インポートを使ってください。
@@ -135,8 +139,8 @@ Chrome は ID ごとに保存領域を分けているため、旧 ID のデー�
    > なります。この状態になると **Chrome を再起動するたびに拡張が一覧から消えます**。
    > 必ず削除してから読み込み直してください。
 
-3. 拡張のフォルダを v0.3.0 に更新し、「パッケージ化されていない拡張機能を読み込む」で
-   **改めて読み込む**（ID が `lddkfmdklnjalpkojbfajlkcgghidjhc` になります）
+3. 拡張のフォルダを最新に更新し、「パッケージ化されていない拡張機能を読み込む」で
+   **`extension/` フォルダ**を読み込む（ID が `lddkfmdklnjalpkojbfajlkcgghidjhc` になります）
 4. **Chrome を一度再起動し、拡張が消えないことを確認する**
 5. マスターパスワードを設定し直す
 6. 手順 1 で控えた資格情報を登録（またはインポート）する
@@ -211,7 +215,7 @@ Touch ID を有効にしておくと、施錠中に Basic 認証のあるペー�
 | 登録していないサイトでも Touch ID が出る | 施錠中は「その host の登録があるか」を判定できないための仕様です。キャンセルすれば以降は聞きません |
 | Touch ID が出ない | システム設定 > Touch ID とパスコード を確認 |
 | インポートで「対応していないファイル形式」 | この拡張がエクスポートしたファイルか確認してください |
-| **Chrome を再起動するたびに拡張が消える** | 移行時に「削除」せず「再読み込み」したため、同じフォルダを指す登録が 2 つ残っています。`chrome://extensions` で**該当する項目をすべて削除** → Chrome を完全終了 → 起動し直してから**1 回だけ**読み込み直してください |
+| **Chrome を再起動するたびに拡張が消える** | リポジトリのルートを読み込んでいませんか。`extension/` を指定してください。ルートには `node_modules/` が入っており、Chrome の起動時読み込みが通りません |
 
 ## 開発
 
@@ -230,18 +234,19 @@ node tools/local-401-server.js    # 動作確認用の 401 サーバ（user / pa
 
 ## ファイル構成
 ```
-manifest.json        MV3 マニフェスト（key で拡張 ID を固定）
-icons/               拡張アイコン（tools/gen-icons.js で再生成可）
-src/crypto.js        WebCrypto ラッパ（鍵導出・暗号/復号）
-src/transfer.js      エクスポート/インポートの純粋ロジック
-src/vault.js         金庫ロジック（初期化・解錠・CRUD・検索・Touch ID）
-src/native.js        Native Messaging ラッパ
-src/background.js    Service Worker（onAuthRequired フック・Touch ID 自動解錠）
-src/popup.*          ツールバーポップアップ
-src/options.*        設定画面
-src/native-test.*    Touch ID ネイティブホストの検証用ページ（開発用）
+extension/           ← Chrome に読み込ませるのはここだけ
+  manifest.json      MV3 マニフェスト（key で拡張 ID を固定）
+  icons/             拡張アイコン（tools/gen-icons.js で再生成可）
+  src/crypto.js      WebCrypto ラッパ（鍵導出・暗号/復号）
+  src/transfer.js    エクスポート/インポートの純粋ロジック
+  src/vault.js       金庫ロジック（初期化・解錠・CRUD・検索・Touch ID）
+  src/native.js      Native Messaging ラッパ
+  src/background.js  Service Worker（onAuthRequired フック・Touch ID 自動解錠）
+  src/popup.*        ツールバーポップアップ
+  src/options.*      設定画面
+  src/native-test.*  Touch ID ネイティブホストの検証用ページ（開発用）
 native/              Swift 製ネイティブホスト（build.sh / install.sh / README）
-tools/               開発用スクリプト（配布物には含まれません）
+tools/               開発用スクリプト（ブラウザには読み込まれません）
 test/                自動テスト（node --test）
 PROJECT_SPEC.md      仕様書
 docs/DESIGN.md       詳細設計

@@ -1,4 +1,4 @@
-// Generate the extension icons (16 / 48 / 128 px PNG) into icons/.
+// Generate the extension icons (16 / 48 / 128 px PNG) into extension/icons/.
 //
 // Written by hand rather than pulled from a design tool so the repo stays
 // dependency-free: Node's zlib is the only thing needed to emit a PNG.
@@ -11,7 +11,7 @@ import { writeFileSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const OUT_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "icons");
+const OUT_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "extension", "icons");
 const SIZES = [16, 48, 128];
 
 const PALETTE = {

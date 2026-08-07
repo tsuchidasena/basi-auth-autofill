@@ -11,7 +11,7 @@ import {
   buildPlainExport,
   parseImport,
   mergeEntries,
-} from "../src/transfer.js";
+} from "../extension/src/transfer.js";
 
 const PASS = "correct horse battery staple";
 

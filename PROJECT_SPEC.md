@@ -27,16 +27,21 @@ Chrome 拡張機能で `chrome.webRequest.onAuthRequired` をフックし、
 - **配布方法**: git clone（相手も Git 環境があり README を読める）。Chrome ウェブストアは使わない
 
 ## アーキテクチャ
+
+**Chrome に読み込ませるのは `extension/` のみ。** リポジトリのルートには開発用のもの
+（`node_modules/` `tools/` `test/` `docs/`）しか置かない。ルートを読み込ませると、
+Chrome の起動時読み込みが通らず**再起動のたびに拡張が消える**（v0.3.1 で判明）。
+
 | コンポーネント | 役割 |
 |---|---|
-| `manifest.json` | MV3 マニフェスト。`webRequest` / `webRequestAuthProvider` / `storage` / `nativeMessaging` / `notifications` 権限、および ID 固定用の `key` |
-| `src/crypto.js` | WebCrypto ラッパ（鍵導出・AES-GCM 暗号/復号・base64） |
-| `src/vault.js` | 金庫ロジック（初期化・解錠/施錠・エントリ CRUD・資格情報検索・Touch ID） |
-| `src/transfer.js` | エクスポート / インポート（ファイル生成・検証・マージ）※ v0.3.0 で追加 |
-| `src/native.js` | Native Messaging ラッパ |
-| `src/background.js` | Service Worker。`onAuthRequired` をフックし資格情報を供給。Touch ID 自動解錠を駆動 |
-| `src/popup.*` | ツールバーポップアップ（解錠/施錠・現在サイトのクイック登録） |
-| `src/options.*` | 設定画面（マスターPW設定・全エントリの管理・Touch ID・エクスポート/インポート） |
+| `extension/manifest.json` | MV3 マニフェスト。`webRequest` / `webRequestAuthProvider` / `storage` / `nativeMessaging` / `notifications` 権限、および ID 固定用の `key` |
+| `extension/src/crypto.js` | WebCrypto ラッパ（鍵導出・AES-GCM 暗号/復号・base64） |
+| `extension/src/vault.js` | 金庫ロジック（初期化・解錠/施錠・エントリ CRUD・資格情報検索・Touch ID） |
+| `extension/src/transfer.js` | エクスポート / インポート（ファイル生成・検証・マージ）※ v0.3.0 で追加 |
+| `extension/src/native.js` | Native Messaging ラッパ |
+| `extension/src/background.js` | Service Worker。`onAuthRequired` をフックし資格情報を供給。Touch ID 自動解錠を駆動 |
+| `extension/src/popup.*` | ツールバーポップアップ（解錠/施錠・現在サイトのクイック登録） |
+| `extension/src/options.*` | 設定画面（マスターPW設定・全エントリの管理・Touch ID・エクスポート/インポート） |
 | `native/` | Swift 製ネイティブホスト（Touch ID ゲート） |
 
 ## データモデル
@@ -259,7 +264,7 @@ v0.2.0 では Touch ID で解錠はできるが、認証中だったリクエス
   - **例外として `src/transfer.js` のみ自動テストを置く**。同モジュールは `chrome.*` に依存しない純粋ロジックとして設計されており、Node 標準の `node --test` で**依存追加ゼロ**のまま回せる。当初「テスト基盤の新設がコストに見合わない」として自動テストを見送ったが、この範囲では新設コストが発生しない。エクスポート/インポートの件数計算や衝突判定は目視で確かめにくく、壊れても気づきにくい箇所でもある
   - 自動 / 手動の割り付けは `docs/DESIGN.md` §8 に機能 ID 単位で記載
 
-## `manifest.json` への変更（v0.2.0 → v0.3.0）
+## `extension/manifest.json` への変更（v0.2.0 → v0.3.0）
 - `version`: `0.2.0` → `0.3.0`
 - `key`: 追加（RSA 2048 公開鍵の base64）
 - `permissions`: `notifications` を追加

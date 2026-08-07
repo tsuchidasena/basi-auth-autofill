@@ -9,17 +9,27 @@ HTTP Basic 認証の資格情報を暗号化保存して自動入力する Chrom
 
 ## 構成の大原則
 
-**拡張本体はビルド不要**。`chrome://extensions` に unpacked で読み込めばそのまま動く。
-Node のツールチェーンは開発時のみで、配布物には一切含めない（`node_modules/` `tools/` `test/`）。
+**`extension/` の中には、ブラウザに読み込ませるものだけを置く。**
+
+Chrome に渡すのは `extension/` であってリポジトリルートではない。ルートには開発用のものしか
+置かない（`node_modules/` `tools/` `test/` `docs/` `.git/`）。
+
+> ⚠️ この分離は事故から来ている。v0.3.0 の開発中、リポジトリルートを Chrome に読み込ませたまま
+> `pnpm install` を実行し、拡張ディレクトリが 40 ファイルから 1890 ファイル（シンボリックリンク
+> 192 本、`_` 始まりのファイル多数）に膨れた。結果 **Chrome を再起動するたびに拡張が消える**
+> ようになり、原因特定に長時間を要した。`extension/` に何かを足すときは「これはブラウザが
+> 読む必要があるか」を必ず問うこと。
+
+**拡張本体はビルド不要**。`chrome://extensions` で `extension/` を unpacked 読み込みすればそのまま動く。
 この性質を壊す変更（バンドラ導入・トランスパイル前提のコード）は入れない。
 
 ## `chrome.*` 依存の境界
 
 設計上いちばん重要な線。
 
-- `src/crypto.js` `src/transfer.js` — `chrome.*` を**参照しない**。Node でそのままテストできる
-- `src/vault.js` `src/background.js` — `chrome.storage` / `chrome.webRequest` / native に依存
-- DOM 操作・ファイル入出力は `src/options.js` `src/popup.js` に閉じる
+- `extension/src/crypto.js` `extension/src/transfer.js` — `chrome.*` を**参照しない**。Node でそのままテストできる
+- `extension/src/vault.js` `extension/src/background.js` — `chrome.storage` / `chrome.webRequest` / native に依存
+- DOM 操作・ファイル入出力は `extension/src/options.js` `extension/src/popup.js` に閉じる
 
 純粋モジュールに `chrome.*` を持ち込むと `test/` が動かなくなる。
 
@@ -55,7 +65,7 @@ node tools/ext-id.js      # manifest.json の key から拡張 ID を算出
 これが動かないと再読み込みが効いたのか判断できない。
 
 ```jsonc
-"version": "0.2.7",                     // 作業ごとに patch +1
+"version": "0.2.7",                     // extension/manifest.json。作業ごとに patch +1
 "version_name": "0.2.7 — T-009 バッジ/通知"  // 何が入ったビルドか
 ```
 
@@ -73,14 +83,14 @@ node tools/ext-id.js      # manifest.json の key から拡張 ID を算出
 秘密鍵  : ~/Developers/basic-auth-autofill-keys/extension-key.pem （repo 外・600）
 ```
 
-`node tools/ext-id.js` で manifest から ID を再算出できる。
+`node tools/ext-id.js` で manifest から ID を再算出できる。Chrome には `extension/` を読み込ませる。
 ネイティブホストの登録は `./native/install.sh lddkfmdklnjalpkojbfajlkcgghidjhc`。
 秘密鍵は .crx 署名に切り替える場合にのみ必要。失うと ID を再現できないので消さない。
 
 ## 触るときに注意が要る場所
 
-- `src/background.js` の `onAuthRequired` — `asyncBlocking` のコールバックを保留する設計。
+- `extension/src/background.js` の `onAuthRequired` — `asyncBlocking` のコールバックを保留する設計。
   単一飛行（`unlockInFlight`）を壊すと Touch ID プロンプトが多重に出る
-- `src/native.js` ↔ `native/src/main.swift` — Native Messaging の契約。片方だけ変えない
-- `manifest.json` の `key` — 変えると拡張 ID が変わり、保存データが参照できなくなる。
+- `extension/src/native.js` ↔ `native/src/main.swift` — Native Messaging の契約。片方だけ変えない
+- `extension/manifest.json` の `key` — 変えると拡張 ID が変わり、保存データが参照できなくなる。
   `native/install.sh` の再実行も必要になる

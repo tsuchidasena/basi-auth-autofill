@@ -2,15 +2,15 @@ import globals from "globals";
 
 /**
  * Flat config. Two environments live in this repo:
- *   src/   — extension code: browser + chrome.* APIs, ES modules, no bundler
- *   test/  — pure-logic tests run by `node --test`
+ *   extension/src/ — extension code: browser + chrome.* APIs, ES modules, no bundler
+ *   test/          — pure-logic tests run by `node --test`
  */
 export default [
   {
-    ignores: ["node_modules/", "native/bin/", "logs/", "icons/"],
+    ignores: ["node_modules/", "native/bin/", "logs/", "extension/icons/"],
   },
   {
-    files: ["src/**/*.js"],
+    files: ["extension/src/**/*.js"],
     languageOptions: {
       ecmaVersion: 2023,
       sourceType: "module",

@@ -25,25 +25,33 @@ Node のツールチェーンは**開発時のみ**で、配布物には一切�
 | 項目 | 決定 |
 |---|---|
 | パッケージマネージャ | pnpm（`pnpm-workspace.yaml` に `minimumReleaseAge` / `trustPolicy`） |
-| Lint | ESLint 9 flat config（`eslint.config.js`）。`src/` は browser + webextensions、`test/` `tools/` は node |
-| テスト | `node --test test/`（依存ゼロ。Node 標準ランナー） |
+| Lint | ESLint 9 flat config（`eslint.config.js`）。`extension/src/` は browser + webextensions、`test/` `tools/` は node |
+| テスト | `node --test "test/**/*.test.js"`（依存ゼロ。Node 標準ランナー） |
 | typecheck / build | 無し（素の ES モジュール） |
 | 整形 | Prettier は入れない。ESLint の `prefer-const` / `no-var` 等で最低限だけ縛る |
 
 ### ディレクトリの責務
 
 ```
-src/crypto.js     WebCrypto ラッパ。chrome.* に依存しない
-src/transfer.js   [新規] エクスポート/インポートの純粋ロジック。chrome.* に依存しない
-src/vault.js      金庫。chrome.storage と native に依存
-src/native.js     Native Messaging ラッパ
-src/background.js Service Worker。onAuthRequired・自動解錠・バッジ/通知
-src/popup.*       ポップアップ
-src/options.*     設定画面。ファイル入出力の DOM 操作はここに閉じる
-tools/            開発用スクリプト（アイコン生成・拡張 ID 算出）。配布物に含めない
-test/             node --test 対象。src/ の純粋モジュールのみを対象にする
-icons/            拡張アイコン。tools/gen-icons.js で再生成できる
+extension/            ← Chrome が読むのはここだけ（v0.3.1 で分離）
+  manifest.json
+  src/crypto.js       WebCrypto ラッパ。chrome.* に依存しない
+  src/transfer.js     エクスポート/インポートの純粋ロジック。chrome.* に依存しない
+  src/vault.js        金庫。chrome.storage と native に依存
+  src/native.js       Native Messaging ラッパ
+  src/background.js   Service Worker。onAuthRequired・自動解錠・バッジ/通知
+  src/popup.*         ポップアップ
+  src/options.*       設定画面。ファイル入出力の DOM 操作はここに閉じる
+  icons/              拡張アイコン。tools/gen-icons.js で再生成できる
+tools/                開発用スクリプト（アイコン生成・拡張 ID 算出・401 サーバ）
+test/                 node --test 対象。extension/src/ の純粋モジュールのみ
+node_modules/         eslint のみ。**extension/ の中には絶対に置かない**
 ```
+
+**`extension/` とリポジトリルートの分離**が構成上の第一の線。Chrome の unpacked 読み込みは
+指定ディレクトリ配下を全走査するため、`node_modules`（1836 ファイル・シンボリックリンク 192 本）が
+同居していると起動時の読み込みが通らず、**再起動のたびに拡張が消える**。v0.3.0 の開発中に
+実際に踏んだ（`2026-08-08_拡張が再起動で消える.md`）。
 
 **`chrome.*` 依存の境界**が本設計の要。`crypto.js` と `transfer.js` は `chrome.*` を一切参照しない
 （Node でそのままテストできる）。ファイル選択・ダウンロード・DOM は `options.js` 側に閉じる。
@@ -70,7 +78,7 @@ MV3 の Service Worker はアイドル数十秒で停止し、モジュールス
 
 ---
 
-## 3. F-01 / F-02 — `src/transfer.js`
+## 3. F-01 / F-02 — `extension/src/transfer.js`
 
 ### ファイルフォーマット
 
