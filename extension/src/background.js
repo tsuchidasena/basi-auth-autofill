@@ -215,28 +215,40 @@ async function handleAuth(details) {
 // requested — without it this listener sees every header except the one that
 // matters. Observation-only listeners remain available in MV3; it is
 // webRequestBlocking that was restricted.
-chrome.webRequest.onBeforeSendHeaders.addListener(
-  (details) => {
-    let host;
-    try {
-      host = new URL(details.url).host;
-    } catch {
-      return;
-    }
-    if (!watching.has(host)) return; // only hosts whose 401 we could not answer
+function observeHeaders(stage, details) {
+  let host;
+  try {
+    host = new URL(details.url).host;
+  } catch {
+    return;
+  }
+  if (!watching.has(host)) return; // only hosts whose 401 we could not answer
 
-    const header = details.requestHeaders?.find((h) => h.name.toLowerCase() === "authorization");
-    console.log(
-      `[F-08] headers for watched ${host} (req=${details.requestId}) — Authorization: ${header ? "present" : "ABSENT"}`
-    );
-    const cred = header && parseBasicAuth(header.value);
-    if (cred) {
-      pending.set(details.requestId, { host, ...cred });
-      console.log(`[F-08] captured ${cred.username} for ${host}`);
-    } else if (header) {
-      console.log(`[F-08] Authorization present but not usable Basic: ${header.value.slice(0, 12)}…`);
-    }
-  },
+  const header = details.requestHeaders?.find((h) => h.name.toLowerCase() === "authorization");
+  console.log(
+    `[F-08] ${stage} ${host} (req=${details.requestId}) — Authorization: ${header ? "present" : "ABSENT"}`
+  );
+  const cred = header && parseBasicAuth(header.value);
+  if (cred) {
+    pending.set(details.requestId, { host, ...cred });
+    console.log(`[F-08] captured ${cred.username} for ${host} via ${stage}`);
+  } else if (header) {
+    console.log(`[F-08] Authorization present but not usable Basic: ${header.value.slice(0, 12)}…`);
+  }
+}
+
+// Two stages, until we know which one carries it. onBeforeSendHeaders reports
+// headers before extensions modify them; onSendHeaders reports what actually
+// went on the wire. Chrome's auth handler adds Authorization after the user
+// fills the dialog, which may well be downstream of the first.
+chrome.webRequest.onBeforeSendHeaders.addListener(
+  (d) => observeHeaders("onBeforeSendHeaders", d),
+  { urls: ["<all_urls>"] },
+  ["requestHeaders", "extraHeaders"]
+);
+
+chrome.webRequest.onSendHeaders.addListener(
+  (d) => observeHeaders("onSendHeaders", d),
   { urls: ["<all_urls>"] },
   ["requestHeaders", "extraHeaders"]
 );
