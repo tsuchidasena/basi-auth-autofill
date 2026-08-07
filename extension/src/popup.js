@@ -9,6 +9,7 @@ import {
   findCredentials,
   isBioEnabled,
 } from "./vault.js";
+import { normalizeHost } from "./host.js";
 
 const $ = (id) => document.getElementById(id);
 const views = {
@@ -53,7 +54,10 @@ async function render() {
   if (!(await isUnlocked())) {
     setBadge("施錠中", "locked");
     show("locked");
-    $("bio-unlock-btn").hidden = !(await isBioEnabled());
+    // Touch ID needs a macOS-only native host; off a Mac the button could only
+    // ever fail, so it is not offered. See options.js for the reasoning.
+    const { os } = await chrome.runtime.getPlatformInfo();
+    $("bio-unlock-btn").hidden = os !== "mac" || !(await isBioEnabled());
     $("unlock-pw").focus();
     return;
   }
@@ -122,7 +126,7 @@ $("bio-unlock-btn").addEventListener("click", async () => {
 
 // --- quick add ---
 $("qa-save").addEventListener("click", async () => {
-  const host = $("qa-host").value.trim();
+  const host = normalizeHost($("qa-host").value);
   const username = $("qa-user").value;
   const password = $("qa-pass").value;
   if (!host || !username) return msg("host とユーザ名は必須です。");

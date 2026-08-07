@@ -11,6 +11,7 @@ import {
   b64ToBuf,
 } from "./crypto.js";
 import { sendNative } from "./native.js";
+import { hostMatches, normalizeHost } from "./host.js";
 
 const LOCAL_VAULT = "vault"; // { salt, iv, ct } in storage.local
 const LOCAL_BIOWRAP = "bioWrap"; // { iv, ct } = vault key wrapped by the Touch ID key
@@ -131,25 +132,18 @@ export async function unlockWithBio() {
   await chrome.storage.session.set({ [SESSION_KEY]: data.v });
 }
 
-// Match an entry host pattern against a request host ("host" includes port if non-default).
-function hostMatches(pattern, host) {
-  if (pattern === host) return true;
-  if (pattern.startsWith("*.")) {
-    const base = pattern.slice(2);
-    // *.example.com matches a.example.com and example.com itself.
-    return host === base || host.endsWith("." + base);
-  }
-  return false;
-}
-
 // Find credentials for `host`. Exact matches win over wildcard matches.
 // Throws "LOCKED" if the vault is locked (caller decides what to do).
 export async function findCredentials(host) {
   const entries = await getEntries();
   let wildcard = null;
   for (const e of entries) {
-    if (e.host === host) return { username: e.username, password: e.password };
-    if (!wildcard && hostMatches(e.host, host)) wildcard = e;
+    // Normalise the stored pattern too. Entries saved before v0.3.2 can hold a
+    // pasted URL ("http://example.com/") that would never match, and the user
+    // has no way to tell from the list why nothing fires.
+    const pattern = normalizeHost(e.host);
+    if (pattern === host) return { username: e.username, password: e.password };
+    if (!wildcard && hostMatches(pattern, host)) wildcard = e;
   }
   return wildcard ? { username: wildcard.username, password: wildcard.password } : null;
 }

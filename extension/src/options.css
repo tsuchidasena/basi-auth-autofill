@@ -79,3 +79,19 @@ td.actions button { padding: 4px 8px; font-size: 12px; margin-left: 6px; }
 
 .msg { min-height: 18px; margin: 8px 0 0; font-size: 13px; color: var(--warn); }
 .msg.ok { color: var(--ok); }
+
+th.pick, td.pick { width: 28px; padding-right: 0; }
+th.pick input, td.pick input { width: auto; margin: 0; vertical-align: middle; }
+.pick-note { margin: 10px 0 0; font-size: 12px; }
+
+.field { display: block; font-size: 12px; color: var(--muted); margin-bottom: 10px; }
+.field input { margin-top: 4px; }
+.field input[type="file"] { padding: 6px; background: #f6f8fa; }
+
+.check { display: block; font-size: 13px; margin: 4px 0 12px; cursor: pointer; }
+.check input { width: auto; margin: 0 6px 0 0; vertical-align: middle; }
+
+#im-conflicts { margin-top: 16px; border-top: 1px solid var(--border); padding-top: 14px; }
+#im-conflicts td { font-size: 12px; }
+#im-conflicts .row { margin-top: 12px; }
+td.cmp { color: var(--muted); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; word-break: break-all; }
