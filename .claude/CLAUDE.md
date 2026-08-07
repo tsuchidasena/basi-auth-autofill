@@ -27,7 +27,8 @@ Chrome に渡すのは `extension/` であってリポジトリルートでは�
 
 設計上いちばん重要な線。
 
-- `extension/src/crypto.js` `extension/src/transfer.js` — `chrome.*` を**参照しない**。Node でそのままテストできる
+- `extension/src/crypto.js` `extension/src/transfer.js` `extension/src/host.js` `extension/src/suggest.js`
+  — `chrome.*` を**参照しない**。Node でそのままテストできる
 - `extension/src/vault.js` `extension/src/background.js` — `chrome.storage` / `chrome.webRequest` / native に依存
 - DOM 操作・ファイル入出力は `extension/src/options.js` `extension/src/popup.js` に閉じる
 
@@ -44,6 +45,9 @@ node tools/ext-id.js      # manifest.json の key から拡張 ID を算出
 ```
 
 `check` スキルは lint と test を回す。typecheck / build は存在しない。
+
+`.claude/settings.json` はサンドボックスが書き込みを拒否する。hook を足すときは
+`/update-config` を使うか、ユーザーに実行してもらう。
 
 ## 規約
 
@@ -94,3 +98,8 @@ node tools/ext-id.js      # manifest.json の key から拡張 ID を算出
 - `extension/src/native.js` ↔ `native/src/main.swift` — Native Messaging の契約。片方だけ変えない
 - `extension/manifest.json` の `key` — 変えると拡張 ID が変わり、保存データが参照できなくなる。
   `native/install.sh` の再実行も必要になる
+- `extension/src/transfer.js` のエントリ射影 — **`normalizeEntry`（内部用・`hardReload` を保つ）と
+  `toExportEntry`（出力用・落とす）を混同しない**。1つの関数で兼ねると、インポートのたびに
+  既存エントリのローカル設定が消える
+- **バッジの意味は2つある** — `!`（赤）＝解錠が必要 / `+`（青）＝保存の提案あり。
+  両方成立するときは `!` が勝つ（施錠中は保存もできないため）
