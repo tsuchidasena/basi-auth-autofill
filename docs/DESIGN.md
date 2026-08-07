@@ -400,3 +400,270 @@ F-01・F-02 は自動＋手動、F-03・F-04・F-06 は手動のみ。
 生体鍵が再 enroll で変わると `unlockWithBio` が `bioWrap` を破棄して投げる（既存挙動）。
 自動解錠経路では通常の失敗と同様に扱う（抑制＋通知）。通知文面は共通で構わない —
 利用者の次の行動が「拡張アイコンから解錠する」で同じため。
+
+---
+
+# v0.4 詳細設計（F-08 / F-09 / F-10 / F-11）
+
+要件は `../PROJECT_SPEC.md`。ここは**どう作るか**だけ。
+
+## 適用セクション
+
+| セクション | 扱い |
+|---|---|
+| 1. 開発環境・規約 | 既存を踏襲。変更は hook の追加のみ（§14） |
+| 2. DB 詳細設計 | **除外** — RDB なし。`Entry` の項目追加を §11 で扱う |
+| 3. モジュール / 処理設計 | 実施（§10〜§13）— 主戦場 |
+| 4. インターフェース設計 | 実施（§13）— 拡張内メッセージが増える |
+| 5. インフラ詳細 | **除外** — サーバなし |
+| 6. テスト設計 | 実施（§15） |
+| 7. タスク分解 | 実施 — `tasks.md`（repo 外） |
+
+---
+
+## 10. F-08 — 資格情報の記憶提案
+
+### 成立条件（調査済み・スパイク不要）
+
+- 観測用の `webRequest` は MV3 でも `webRequest` 権限だけで動く（制限されたのは `webRequestBlocking`）
+- **`Authorization` は既定で `onBeforeSendHeaders` に渡ってこない。** `extraHeaders` の指定が要る
+
+```js
+chrome.webRequest.onBeforeSendHeaders.addListener(
+  onHeaders, { urls: ["<all_urls>"] }, ["requestHeaders", "extraHeaders"]
+);
+```
+
+**新しい権限は不要**（`webRequest` と `<all_urls>` は既に持っている）。
+
+### 状態と寿命
+
+| 置き場所 | 内容 | 寿命 |
+|---|---|---|
+| SW メモリ `watching: Set<host>` | 「401 が来たが供給できなかった」host | SW 停止で消える |
+| SW メモリ `pending: Map<requestId, {host, username, password}>` | 観測した資格情報 | 同上 |
+| SW メモリ `suggestion` | 提案中の1件 | 同上 |
+| `storage.session` `suggestDismissed: string[]` | 却下された host | ブラウザ終了で消える |
+
+**資格情報は storage に一切書かない**（AC-08-2 / AC-08-7）。却下リストだけは
+「SW が落ちても却下が効き続ける」必要があるので `storage.session` に置く（F-04 の `bioSuppressed` と同じ理由）。
+
+### 処理フロー
+
+```
+onAuthRequired  … 供給できなかった → watching.add(host)
+       ↓
+onBeforeSendHeaders  … host が watching にあり Authorization: Basic があれば
+                       pending.set(requestId, 復号した {username, password})
+       ↓
+onCompleted  … 2xx なら classifySuggestion() で判定 → 提案
+             … 2xx 以外なら pending.delete()（AC-08-3）
+       ↓
+バッジ「+」＋通知  →  利用者がツールバーアイコンをクリック
+       ↓
+ポップアップが SUGGESTION_GET でメモリ上の提案を取得 → 確認カード表示
+       ↓
+保存 → 金庫へ ／ 却下 → suggestDismissed に host を追加
+```
+
+`onErrorOccurred` でも `pending.delete(requestId)` する（取りこぼし防止）。
+
+### バッジの意味が2つになる
+
+F-04 が既にバッジを使っているので、記号で分ける。
+
+| 表示 | 意味 | 色 |
+|---|---|---|
+| `!` | 解錠が必要（F-04） | 赤 `#dc2626` |
+| `+` | 保存の提案あり（F-08） | 青 `#2563eb` |
+
+**両方成立するときは `!` が勝つ** — 施錠中は保存もできないため。解錠でバッジを消す既存の
+`storage.onChanged` ハンドラは、提案が残っていれば `+` に描き替える。
+
+### 提案 UI をポップアップに置く理由
+
+`chrome.notifications.onClicked` からポップアップは開けない（`chrome.action.openPopup()` は
+呼び出し文脈が限られる）。設定画面を開く手もあるが、**通知は気づかせる役・バッジは状態の持続表示役・
+ポップアップが操作面**という F-04 で確立した役割分担に揃えるほうが、利用者が覚えることが増えない。
+
+通知はクリックしても何もしない（文言で「拡張アイコンから保存できます」と誘導する）。
+
+### 提案が消えている場合
+
+SW が停止すると提案はメモリごと消えるが、**バッジはブラウザ側の状態なので残る**。
+ポップアップが `SUGGESTION_GET` に空を受け取ったら、バッジを消して
+「提案の期限が切れました。もう一度アクセスすると再提案します」と表示する。
+
+`watching` も消えているので、次の 401 から自然にやり直しになる。AC-08-7 どおりの挙動。
+
+### 純粋ロジック — `extension/src/suggest.js`
+
+`chrome.*` を参照しない。`node --test` の対象（`crypto.js` `transfer.js` `host.js` と同じ扱い）。
+
+```js
+export function parseBasicAuth(headerValue);
+// "Basic dXNlcjpwYXNz" -> { username, password } / 不正なら null
+
+export function classifySuggestion(entries, host, username, password);
+// -> "new"     … その host の登録が無い
+// -> "update"  … 登録はあるが username か password が違う（AC-08-5）
+// -> "same"    … 完全に一致（提案しない）
+```
+
+判定を純粋関数に切り出すことで、「同じ資格情報で毎回提案が出る」類の退行をテストで止められる。
+
+---
+
+## 11. F-10 — サイト単位のハードリロード
+
+### スパイクが先（T-101）
+
+案 A（`declarativeNetRequest` で `Cache-Control: no-cache` を差し込む）が実際にキャッシュを
+迂回するかは未確認。**Chrome のキャッシュ参照がヘッダ改変より前に走ると効かない。**
+効かなければ案 B（`chrome.tabs.reload({bypassCache:true})`／二度読み込み）に落とす。
+
+検証方法: `tools/local-401-server.js` に `Cache-Control: max-age=300` を返すエンドポイントを足し、
+2回目のアクセスがネットワークに出るか（サーバのログに現れるか）で判定する。
+
+### `Entry` への項目追加と、`pickEntry` の分割【重要】
+
+```jsonc
+{ "host": "...", "username": "...", "password": "...", "label": "...",
+  "hardReload": false }   // v0.4 で追加
+```
+
+`hardReload` は**ローカルのデバッグ設定であって資格情報ではない**ので、
+**エクスポートには含めない**（`EXPORT_VERSION` は 1 のまま据え置き）。
+
+ここに既存コードの罠がある。`transfer.js` の `pickEntry` は
+**エクスポート用の射影**と**マージ用の正規化**を兼ねており（`mergeEntries` が
+`existing.map(pickEntry)` を呼ぶ）、そのまま `hardReload` を落とすと
+**インポートのたびに既存エントリのフラグが消える**。用途ごとに分ける。
+
+```js
+function normalizeEntry(e)  // 内部用。hardReload を保つ
+function toExportEntry(e)   // 出力用。hardReload を落とす
+```
+
+`mergeEntries` は `normalizeEntry`、`buildEncryptedExport` / `buildPlainExport` は
+`toExportEntry` を使う。`parseImport` は `normalizeEntry`（ファイル側に無ければ `false`）。
+
+### 適用
+
+設定された host へのリクエスト全部（本体もサブリソースも）。
+一覧に印を出すだけで、実行時の通知やバッジは出さない（AC-10-3）。
+
+---
+
+## 12. F-09 — 導入体験の整備
+
+### `install.sh` の ID 算出
+
+macOS 標準のみ。Node も Python も要求しない（実測確認済み）。
+
+```sh
+EXT_ID="${1:-}"
+if [[ -z "$EXT_ID" ]]; then
+  KEY=$(sed -n 's/.*"key"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' ../extension/manifest.json)
+  EXT_ID=$(printf '%s' "$KEY" | base64 -d | shasum -a 256 | head -c 32 | tr '0-9a-f' 'a-p')
+fi
+```
+
+引数が渡された場合はそれを優先（AC-09-1 の後段）。`key` が無い／算出に失敗した場合は
+従来どおり「引数で渡してください」と案内して終了する。
+
+### ネイティブホストの導入検知
+
+```js
+// vault.js に追加
+export async function isNativeHostInstalled() {
+  try { const r = await sendNative({ cmd: "status" }); return !!r; }
+  catch { return false; }   // lastError = 未登録
+}
+```
+
+既存の `native.js` がそのまま使える。新しい仕組みは要らない。
+
+### 案内の状態遷移
+
+設定画面の Touch ID カードと、初期設定直後の案内で**同じ部品**を使う。
+
+```
+mac でない            → 何も表示しない（F-06 / 既存）
+ホスト未導入          → 案内（コマンド＋コピーボタン＋「確認」）
+ホスト導入済み・未登録 → 「Touch ID 解錠を有効化」（既存）
+登録済み              → 「無効化」（既存）
+```
+
+「確認」を押して未導入だったときは、**「Chrome の再起動が必要な場合があります」を必ず添える**
+（AC-09-5）。install 後の再起動が最大のつまずきどころで、ここを名指ししないと詰まる。
+
+---
+
+## 13. インターフェース設計 — 拡張内メッセージ
+
+| type | 引数 | 応答 | 用途 |
+|---|---|---|---|
+| `BIO_UNLOCK` | — | `{ok}` / `{ok:false,error}` | Touch ID 解錠（既存） |
+| `SUGGESTION_GET` | — | `{suggestion}` / `{suggestion:null}` | 提案の取得（F-08 / 新規） |
+| `SUGGESTION_DISMISS` | `{host}` | `{ok}` | 却下（F-08 / 新規） |
+
+保存そのものはポップアップが `vault.js` を直接呼ぶ（既存のクイック登録と同じ流儀）。
+背景に置く理由がない。
+
+Native Messaging の契約（`status` / `enroll` / `unlock` / `reset`）は**変更しない**。
+
+---
+
+## 14. 開発環境の変更 — リリースノートの hook
+
+`.claude/settings.json` の `PreToolUse`（`Bash` の `git commit`）で、
+**`extension/manifest.json` の `version` が変わっているコミットに限り**
+`RELEASE_NOTE.md` が一緒にステージされているかを見る。
+
+```sh
+git diff --cached -- extension/manifest.json | grep -q '^[+-].*"version"' \
+  && ! git diff --cached --name-only | grep -q '^RELEASE_NOTE.md$' \
+  && echo "version を変えています。RELEASE_NOTE.md の更新を忘れていませんか。"
+```
+
+**毎コミットでは止めない。** 前サイクルの 20 コミット中、記載が要ったのは 1 回だけで、
+空振りする警告は無視する習慣を作るだけになる。
+
+---
+
+## 15. テスト設計（v0.4 分）
+
+### 自動（`node --test`）
+
+| 受け入れ条件 | テスト |
+|---|---|
+| AC-08-5 | `classifySuggestion` が new / update / same を正しく返す |
+| AC-08-2 の一部 | `parseBasicAuth` が不正なヘッダに `null` を返す |
+| AC-10-1 の一部 | `normalizeEntry` が `hardReload` を保ち、`toExportEntry` が落とす |
+| （回帰） | マージ後も既存エントリの `hardReload` が消えない |
+
+### 手動のみ（`/forecast`）
+
+| 受け入れ条件 | 理由 |
+|---|---|
+| AC-08-1 / 3 / 4 / 6 / 7 | webRequest の実挙動・通知・バッジ・SW 停止 |
+| AC-09-1〜6 | ターミナル操作とネイティブホストの実導入 |
+| AC-10-2 / 3 | キャッシュの実挙動 |
+| AC-11-1〜4 | ドキュメントの読み比べ |
+
+---
+
+## 16. 例外・状態遷移（v0.4 で増える分）
+
+**提案が出ない条件**（すべて「黙って何もしない」に落ちる）
+
+1. `onAuthRequired` で資格情報を供給できた（＝登録済み）→ そもそも観測しない
+2. `Authorization` が `Basic` でない（Bearer 等）
+3. `onCompleted` が 2xx でない（AC-08-3）
+4. `classifySuggestion` が `same`（既に同じ内容で登録済み）
+5. その host が `suggestDismissed` にある（AC-08-6）
+6. 金庫が未初期化（保存先がない）
+
+**施錠中に提案が出た場合**: 提案は保持し、バッジは `!`（解錠優先）。
+解錠すると `+` に変わり、ポップアップで保存できる。
