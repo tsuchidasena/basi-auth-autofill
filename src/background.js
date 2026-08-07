@@ -12,6 +12,14 @@ import { findCredentials, isUnlocked, isBioEnabled, unlockWithBio } from "./vaul
 // is still generous for a fingerprint tap (1-5s in practice).
 const BIO_TIMEOUT_MS = 15_000;
 
+// Set after a failed auto-unlock so we stop re-prompting. Lives in
+// storage.session, not a module variable: the MV3 service worker is torn down
+// after a few idle seconds, which would silently lift the suppression and let
+// the prompt come back. storage.session survives that and still dies with the
+// browser, which is exactly the lifetime we want.
+const SUPPRESS_KEY = "bioSuppressed";
+const FAILURE_NOTIFICATION_ID = "bio-unlock-failed";
+
 // Touch ID unlock is driven from the background so it completes even if the
 // popup closes when the macOS biometric prompt takes focus.
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
@@ -43,19 +51,58 @@ function withTimeout(promise, ms) {
   });
 }
 
+async function isSuppressed() {
+  const r = await chrome.storage.session.get(SUPPRESS_KEY);
+  return !!r[SUPPRESS_KEY];
+}
+
+// The browser's own auth dialog cannot be annotated — it is browser UI, out of
+// an extension's reach. So say it twice, in the two places we do own: a
+// notification to catch the eye now, and a badge that stays up until the vault
+// is actually unlocked.
+async function announceUnlockNeeded() {
+  await chrome.storage.session.set({ [SUPPRESS_KEY]: true });
+  await chrome.action.setBadgeBackgroundColor({ color: "#dc2626" });
+  await chrome.action.setBadgeText({ text: "!" });
+  // A fixed id means repeated failures replace the notification instead of
+  // stacking up.
+  chrome.notifications.create(FAILURE_NOTIFICATION_ID, {
+    type: "basic",
+    iconUrl: "/icons/icon-128.png",
+    title: "解錠できませんでした",
+    message: "拡張アイコンから解錠したあと、ページを再読み込みしてください。",
+  });
+}
+
 // Resolves true if the vault is unlocked by the time we return.
 async function tryBioUnlock() {
   if (!(await isBioEnabled())) return false;
+  if (await isSuppressed()) return false;
   if (!unlockInFlight) {
     unlockInFlight = withTimeout(unlockWithBio(), BIO_TIMEOUT_MS)
       .then(() => true)
-      .catch(() => false)
+      .catch(async () => {
+        await announceUnlockNeeded();
+        return false;
+      })
       .finally(() => {
         unlockInFlight = null;
       });
   }
   return unlockInFlight;
 }
+
+// Recovery hangs off one signal: the session key appearing. Whether it was the
+// popup's password field, its Touch ID button or an auto-unlock that put it
+// there, the vault is open and the warning is stale. Watching the storage key
+// rather than each unlock path keeps popup and background from having to agree
+// on who clears what.
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== "session" || !changes.sessionKey?.newValue) return;
+  chrome.action.setBadgeText({ text: "" });
+  chrome.storage.session.remove(SUPPRESS_KEY);
+  chrome.notifications.clear(FAILURE_NOTIFICATION_ID);
+});
 
 chrome.webRequest.onAuthRequired.addListener(
   (details, asyncCallback) => {
