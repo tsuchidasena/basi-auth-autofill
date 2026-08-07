@@ -109,3 +109,6 @@ td.cmp { color: var(--muted); font-family: ui-monospace, SFMono-Regular, Menlo, 
   white-space: nowrap;
 }
 .cmd-row button { white-space: nowrap; }
+
+td.fresh, th:nth-last-child(2) { text-align: center; }
+td.fresh { color: var(--primary); font-weight: 600; }

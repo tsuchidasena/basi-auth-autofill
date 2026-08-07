@@ -141,6 +141,11 @@ async function renderEntries() {
     const label = document.createElement("td");
     label.textContent = e.label || "";
 
+    const fresh = document.createElement("td");
+    fresh.className = "fresh";
+    fresh.textContent = e.hardReload ? "✓" : "";
+    fresh.title = e.hardReload ? "訪問時に常にハードリロードします" : "";
+
     const actions = document.createElement("td");
     actions.className = "actions";
     const editBtn = document.createElement("button");
@@ -152,7 +157,7 @@ async function renderEntries() {
     delBtn.addEventListener("click", () => removeEntry(e.host));
     actions.append(editBtn, delBtn);
 
-    tr.append(pick, host, user, label, actions);
+    tr.append(pick, host, user, label, fresh, actions);
     body.appendChild(tr);
   }
   refreshExportCount();
@@ -355,6 +360,7 @@ function startEdit(e) {
   $("f-user").value = e.username;
   $("f-pass").value = e.password;
   $("f-label").value = e.label || "";
+  $("f-hardreload").checked = e.hardReload === true;
   $("f-cancel").hidden = false;
   msg($("form-msg"), "");
   $("f-host").scrollIntoView({ behavior: "smooth", block: "center" });
@@ -367,6 +373,7 @@ function resetForm() {
   $("f-user").value = "";
   $("f-pass").value = "";
   $("f-label").value = "";
+  $("f-hardreload").checked = false;
   $("f-cancel").hidden = true;
   msg($("form-msg"), "");
 }
@@ -410,7 +417,7 @@ $("f-save").addEventListener("click", async () => {
   if (!host || !username) return msg($("form-msg"), "Host とユーザ名は必須です。");
 
   const entries = await getEntries();
-  const entry = { host, username, password, label };
+  const entry = { host, username, password, label, hardReload: $("f-hardreload").checked };
 
   // If host changed during edit, drop the old key.
   const next = editingHost && editingHost !== host

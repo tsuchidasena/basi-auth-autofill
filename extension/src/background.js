@@ -9,6 +9,7 @@ import {
   saveEntries,
 } from "./vault.js";
 import { parseBasicAuth, classifySuggestion } from "./suggest.js";
+import { hostMatches, normalizeHost } from "./host.js";
 
 // How long we hold an auth request open while the Touch ID prompt is up.
 //
@@ -301,6 +302,53 @@ async function clearSuggestion() {
   await refreshBadge();
 }
 
+// --- F-10: always-fresh hosts ----------------------------------------------
+//
+// Reload only when the cache was actually used. Reloading every visit would
+// double every page load; this way the extra load happens exactly in the case
+// it is meant to fix, and the bypassing reload leaves nothing stale behind for
+// the next visit.
+//
+// Chose this over rewriting requests with declarativeNetRequest for two
+// reasons. Whether a modified Cache-Control request header defeats Chrome's
+// cache lookup is unverified — but more decisively, dNR conditions cannot
+// express the host rules used everywhere else here: "||example.com" also
+// matches subdomains, so exact-vs-wildcard collapses, and a port like
+// localhost:8765 has no representation at all. Matching stays in host.js.
+const recentlyForced = new Map(); // tabId -> url
+
+async function hardReloadHosts() {
+  try {
+    return (await getEntries()).filter((e) => e.hardReload === true).map((e) => e.host);
+  } catch {
+    return []; // locked: nothing to act on
+  }
+}
+
+async function maybeForceReload(details) {
+  if (details.type !== "main_frame" || details.tabId < 0) return;
+  if (!details.fromCache) {
+    recentlyForced.delete(details.tabId);
+    return;
+  }
+  if (recentlyForced.get(details.tabId) === details.url) return; // already did this one
+
+  let host;
+  try {
+    host = normalizeHost(new URL(details.url).host);
+  } catch {
+    return;
+  }
+
+  const patterns = await hardReloadHosts();
+  if (!patterns.some((p) => hostMatches(normalizeHost(p), host))) return;
+
+  recentlyForced.set(details.tabId, details.url);
+  chrome.tabs.reload(details.tabId, { bypassCache: true }).catch(() => {});
+}
+
+chrome.tabs.onRemoved.addListener((tabId) => recentlyForced.delete(tabId));
+
 // Clean up the attempt counter once the request finishes, and decide whether
 // anything we observed on the way is worth offering.
 chrome.webRequest.onCompleted.addListener(
@@ -313,6 +361,8 @@ chrome.webRequest.onCompleted.addListener(
   },
   { urls: ["<all_urls>"] }
 );
+
+chrome.webRequest.onCompleted.addListener(maybeForceReload, { urls: ["<all_urls>"] });
 
 chrome.webRequest.onErrorOccurred.addListener(
   (d) => {

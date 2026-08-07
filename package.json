@@ -1,6 +1,6 @@
 {
   "name": "basic-auth-autofill",
-  "version": "0.3.5",
+  "version": "0.3.6",
   "private": true,
   "type": "module",
   "description": "Chrome extension that autofills HTTP Basic auth credentials from an encrypted vault.",

@@ -517,14 +517,25 @@ export function classifySuggestion(entries, host, username, password);
 
 ## 11. F-10 — サイト単位のハードリロード
 
-### スパイクが先（T-101）
+### 方式は案 B（決定済み・2026-08-08）
 
-案 A（`declarativeNetRequest` で `Cache-Control: no-cache` を差し込む）が実際にキャッシュを
-迂回するかは未確認。**Chrome のキャッシュ参照がヘッダ改変より前に走ると効かない。**
-効かなければ案 B（`chrome.tabs.reload({bypassCache:true})`／二度読み込み）に落とす。
+**案 A（`declarativeNetRequest`）は採らない。** キャッシュ迂回が効くかが未検証なのに加えて、
+より決定的な問題がある — **dNR の条件ではこの拡張の host 意味論を表現できない。**
 
-検証方法: `tools/local-401-server.js` に `Cache-Control: max-age=300` を返すエンドポイントを足し、
-2回目のアクセスがネットワークに出るか（サーバのログに現れるか）で判定する。
+- `urlFilter: "||example.com"` はサブドメインにも当たるので、**完全一致とワイルドカードの
+  区別が潰れる**（`example.com` と `*.example.com` は別物として扱う仕様）
+- `localhost:8765` のような**ポート指定を表現する手段がない**（`requestDomains` もポートを持てない）
+
+照合ルールを2つの言語で二重に持つことになり、`host.js` に集約した意味が失われる。
+
+**採用: `onCompleted` の `fromCache` を見て、キャッシュから返ったときだけ
+`chrome.tabs.reload({bypassCache:true})` する。**
+
+素の案 B（訪問のたびにリロード）と違い、**余計な読み込みは「実際にキャッシュが使われた」場合に
+限られる**。迂回リロードが新しい内容で埋め直すので、次の訪問では `fromCache` にならず連続しない。
+照合は `host.js` の `normalizeHost` / `hostMatches` をそのまま使う。追加権限も不要。
+
+ループ防止に `recentlyForced: Map<tabId, url>` を持ち、タブが閉じたら捨てる。
 
 ### `Entry` への項目追加と、`pickEntry` の分割【重要】
 

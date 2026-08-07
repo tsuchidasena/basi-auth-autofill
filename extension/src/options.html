@@ -34,7 +34,7 @@
             <thead>
               <tr>
                 <th class="pick"><input id="pick-all" type="checkbox" checked title="全選択 / 全解除" /></th>
-                <th>Host</th><th>ユーザ名</th><th>メモ</th><th></th>
+                <th>Host</th><th>ユーザ名</th><th>メモ</th><th title="訪問時に常にハードリロードする">再取得</th><th></th>
               </tr>
             </thead>
             <tbody id="entries-body"></tbody>
@@ -59,6 +59,8 @@
               <input id="f-label" type="text" autocomplete="off" />
             </label>
           </div>
+          <label class="check"><input id="f-hardreload" type="checkbox" />
+            このサイトは常にハードリロードする（キャッシュを使わない）</label>
           <div class="row">
             <button id="f-save" class="primary">保存</button>
             <button id="f-cancel" hidden>キャンセル</button>
