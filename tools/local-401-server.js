@@ -18,6 +18,7 @@ const started = Date.now();
 const at = () => `${String(Date.now() - started).padStart(7)}ms`;
 
 let seq = 0;
+const RUN_REALM = `local-${process.pid}`;
 
 // A page whose subresources each need auth. Opening this is how you check that
 // concurrent onAuthRequired events raise ONE Touch ID prompt and not five.
@@ -57,7 +58,12 @@ createServer((req, res) => {
   // origin, so once a bad one is cached nothing can dislodge it — you just see
   // an endless run of 403s. Only a 401 makes Chrome drop it and ask again.
   const challenge = (why) => {
-    const realm = `local-${Date.now()}-${n}`;
+    // One realm per server run, not per request. Rotating it defeats Chrome's
+    // credential cache, which is handy for re-running a test — but it also
+    // means the credentials just typed for the previous realm are not offered
+    // for this one, which turns a poisoned cache entry into an endless dialog.
+    // Restart the server to get a fresh realm.
+    const realm = RUN_REALM;
     console.log(`${at()}  #${n} ${req.method} ${req.url} -> 401 ${why} (realm ${realm})`);
     res.writeHead(401, {
       "WWW-Authenticate": `Basic realm="${realm}"`,
@@ -92,6 +98,6 @@ createServer((req, res) => {
   console.log(`Local 401 server on http://localhost:${PORT}/  (${USER} / ${PASS})`);
   console.log(`  /        single protected request`);
   console.log(`  /multi   page with 5 protected subresources (single-flight check)`);
-  console.log("Every 401 uses a fresh realm, so you can re-run without restarting Chrome.");
+  console.log(`  realm: ${RUN_REALM}（起動ごとに変わります。やり直すときはサーバを再起動）`);
   console.log("Ctrl-C to stop.\n");
 });
