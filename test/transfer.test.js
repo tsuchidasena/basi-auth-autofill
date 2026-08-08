@@ -178,3 +178,40 @@ test("F-01/F-02: 暗号化 → 復号 → マージが一周する", async () =>
   assert.equal(r.next.length, 2);
   assert.equal(r.next.find((e) => e.host === "example.com").password, "replace");
 });
+
+// --- F-10 hardReload の射影（v0.4） ---------------------------------------
+
+test("F-10 (AC-10-1): hardReload はエクスポートに含めない", async () => {
+  const withFlag = [{ ...ENTRIES[0], hardReload: true }];
+  const file = await buildEncryptedExport(withFlag, PASS);
+  const [entry] = await parseImport(file, PASS);
+  assert.equal(entry.hardReload, undefined);
+  assert.deepEqual(Object.keys(entry).sort(), ["host", "label", "password", "username"]);
+});
+
+test("F-10 (AC-10-1): 平文エクスポートにも hardReload を含めない", () => {
+  const file = buildPlainExport([{ ...ENTRIES[0], hardReload: true }]);
+  assert.equal(file.entries[0].hardReload, undefined);
+});
+
+test("F-10 (AC-10-1): マージは既存の hardReload を保つ", () => {
+  const existing = [{ host: "example.com", username: "mine", password: "keep", label: "", hardReload: true }];
+  const r = mergeEntries(existing, [{ host: "new.com", username: "n", password: "p", label: "" }]);
+  assert.equal(r.next.find((e) => e.host === "example.com").hardReload, true);
+});
+
+test("F-10 (AC-10-1): 上書きしても hardReload は引き継ぐ", () => {
+  // フラグは「この端末でその host をどう見るか」であって資格情報ではない。
+  // 取り込んだファイルはこの設定について何の意見も持っていない。
+  const existing = [{ host: "example.com", username: "mine", password: "keep", label: "", hardReload: true }];
+  const incoming = [{ host: "example.com", username: "theirs", password: "replace", label: "" }];
+  const r = mergeEntries(existing, incoming, new Set(["example.com"]));
+  const merged = r.next.find((e) => e.host === "example.com");
+  assert.equal(merged.username, "theirs");
+  assert.equal(merged.hardReload, true);
+});
+
+test("F-10 (AC-10-1): 新規に取り込んだエントリの hardReload は false", () => {
+  const r = mergeEntries([], [{ host: "new.com", username: "n", password: "p", label: "" }]);
+  assert.equal(r.next[0].hardReload, false);
+});

@@ -34,7 +34,7 @@
             <thead>
               <tr>
                 <th class="pick"><input id="pick-all" type="checkbox" checked title="全選択 / 全解除" /></th>
-                <th>Host</th><th>ユーザ名</th><th>メモ</th><th></th>
+                <th>Host</th><th>ユーザ名</th><th>メモ</th><th title="訪問時に常にハードリロードする">再取得</th><th></th>
               </tr>
             </thead>
             <tbody id="entries-body"></tbody>
@@ -59,6 +59,8 @@
               <input id="f-label" type="text" autocomplete="off" />
             </label>
           </div>
+          <label class="check"><input id="f-hardreload" type="checkbox" />
+            このサイトは常にハードリロードする（キャッシュを使わない）</label>
           <div class="row">
             <button id="f-save" class="primary">保存</button>
             <button id="f-cancel" hidden>キャンセル</button>
@@ -128,12 +130,36 @@
              hidden avoids a flash of a section that will never work here. -->
         <div class="card" id="bio-card" hidden>
           <h2>Touch ID 解錠（このMacのみ）</h2>
-          <p class="hint" id="bio-note"></p>
-          <div class="row">
-            <button id="bio-enable" class="primary">Touch ID 解錠を有効化</button>
-            <button id="bio-disable" class="danger-btn" hidden>無効化</button>
+
+          <!-- Shown until the native host answers. The one terminal command is
+               unavoidable: registering the host writes into ~/Library, which an
+               extension cannot do. -->
+          <div id="bio-setup" hidden>
+            <p class="hint">
+              Touch ID で解錠するには、一度だけターミナルで次のコマンドを実行してください。
+              拡張 ID を調べる必要はありません。
+            </p>
+            <div class="cmd-row">
+              <code id="bio-cmd"></code>
+              <button id="bio-copy">コピー</button>
+            </div>
+            <p class="hint">
+              実行したら <strong>Chrome を再起動</strong>し、下の「確認」を押してください。
+            </p>
+            <div class="row">
+              <button id="bio-check" class="primary">確認</button>
+            </div>
+            <p id="bio-setup-msg" class="msg" role="status"></p>
           </div>
-          <p id="bio-msg" class="msg" role="status"></p>
+
+          <div id="bio-ready" hidden>
+            <p class="hint" id="bio-note"></p>
+            <div class="row">
+              <button id="bio-enable" class="primary">Touch ID 解錠を有効化</button>
+              <button id="bio-disable" class="danger-btn" hidden>無効化</button>
+            </div>
+            <p id="bio-msg" class="msg" role="status"></p>
+          </div>
         </div>
 
         <div class="card danger">

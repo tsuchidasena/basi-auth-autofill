@@ -10,6 +10,7 @@ import {
   isBioEnabled,
   enableBio,
   disableBio,
+  isNativeHostInstalled,
 } from "./vault.js";
 import { normalizeHost } from "./host.js";
 import {
@@ -73,12 +74,24 @@ function onMac() {
   return macCheck;
 }
 
+const INSTALL_COMMAND = "./native/install.sh";
+
 async function renderBio() {
   if (!(await onMac())) {
     $("bio-card").hidden = true;
     return;
   }
   $("bio-card").hidden = false;
+  $("bio-cmd").textContent = INSTALL_COMMAND;
+
+  // Three states, not two: "the host was never installed" used to look
+  // identical to "enrolment failed", and the error it produced
+  // (Specified native messaging host not found) reads as a broken install
+  // rather than a step nobody has taken yet.
+  const installed = await isNativeHostInstalled();
+  $("bio-setup").hidden = installed;
+  $("bio-ready").hidden = !installed;
+  if (!installed) return;
 
   const on = await isBioEnabled();
   $("bio-enable").hidden = on;
@@ -128,6 +141,11 @@ async function renderEntries() {
     const label = document.createElement("td");
     label.textContent = e.label || "";
 
+    const fresh = document.createElement("td");
+    fresh.className = "fresh";
+    fresh.textContent = e.hardReload ? "✓" : "";
+    fresh.title = e.hardReload ? "訪問時に常にハードリロードします" : "";
+
     const actions = document.createElement("td");
     actions.className = "actions";
     const editBtn = document.createElement("button");
@@ -139,7 +157,7 @@ async function renderEntries() {
     delBtn.addEventListener("click", () => removeEntry(e.host));
     actions.append(editBtn, delBtn);
 
-    tr.append(pick, host, user, label, actions);
+    tr.append(pick, host, user, label, fresh, actions);
     body.appendChild(tr);
   }
   refreshExportCount();
@@ -342,6 +360,7 @@ function startEdit(e) {
   $("f-user").value = e.username;
   $("f-pass").value = e.password;
   $("f-label").value = e.label || "";
+  $("f-hardreload").checked = e.hardReload === true;
   $("f-cancel").hidden = false;
   msg($("form-msg"), "");
   $("f-host").scrollIntoView({ behavior: "smooth", block: "center" });
@@ -354,6 +373,7 @@ function resetForm() {
   $("f-user").value = "";
   $("f-pass").value = "";
   $("f-label").value = "";
+  $("f-hardreload").checked = false;
   $("f-cancel").hidden = true;
   msg($("form-msg"), "");
 }
@@ -397,7 +417,7 @@ $("f-save").addEventListener("click", async () => {
   if (!host || !username) return msg($("form-msg"), "Host とユーザ名は必須です。");
 
   const entries = await getEntries();
-  const entry = { host, username, password, label };
+  const entry = { host, username, password, label, hardReload: $("f-hardreload").checked };
 
   // If host changed during edit, drop the old key.
   const next = editingHost && editingHost !== host
@@ -479,6 +499,27 @@ $("reset-btn").addEventListener("click", async () => {
   await resetVault();
   resetForm();
   await render();
+});
+
+// --- Touch ID setup guidance ---
+$("bio-copy").addEventListener("click", async () => {
+  await navigator.clipboard.writeText(INSTALL_COMMAND);
+  msg($("bio-setup-msg"), "コピーしました。ターミナルに貼り付けて実行してください。", true);
+});
+
+$("bio-check").addEventListener("click", async () => {
+  msg($("bio-setup-msg"), "確認しています…");
+  if (await isNativeHostInstalled()) {
+    msg($("bio-setup-msg"), "見つかりました。有効化に進めます。", true);
+    await renderBio();
+    return;
+  }
+  // Naming the restart matters: it is the step people skip, and without it the
+  // host stays invisible no matter how many times the command was run.
+  msg(
+    $("bio-setup-msg"),
+    "まだ見つかりません。コマンドを実行したあと、Chrome の再起動が必要な場合があります。"
+  );
 });
 
 // --- Touch ID ---

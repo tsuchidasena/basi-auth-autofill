@@ -12,10 +12,15 @@ import { normalizeHost } from "./host.js";
 export const EXPORT_KIND = "basic-auth-autofill-export";
 export const EXPORT_VERSION = 1;
 
-// Copy across only the fields an entry is meant to carry. On the way out this
-// keeps vault internals from leaking into a file we hand to someone; on the way
-// in it drops anything a hand-edited file tries to smuggle in.
-function pickEntry(e) {
+// Two projections, deliberately separate.
+//
+// They used to be one function, which was fine until an entry gained a
+// local-only setting. `mergeEntries` runs every entry through the internal
+// shape, so a single projection that dropped local settings would quietly wipe
+// them on every import.
+
+// Internal shape — everything an entry carries.
+function normalizeEntry(e) {
   return {
     // Normalise on the way through: a file can carry a pasted URL as its host,
     // whether it was hand-edited or exported by a pre-0.3.2 build.
@@ -23,7 +28,16 @@ function pickEntry(e) {
     username: e.username,
     password: e.password ?? "",
     label: e.label ?? "",
+    hardReload: e.hardReload === true,
   };
+}
+
+// Export projection — credentials only. `hardReload` is a local debugging
+// preference, not something to hand to someone else, and leaving it out keeps
+// the file format at v1.
+function toExportEntry(e) {
+  const { host, username, password, label } = normalizeEntry(e);
+  return { host, username, password, label };
 }
 
 function isValidEntry(e) {
@@ -36,9 +50,11 @@ function isValidEntry(e) {
   );
 }
 
+// Files never carry local settings, so imported entries take the export shape;
+// mergeEntries fills in the rest.
 function readEntries(list) {
   if (!Array.isArray(list) || !list.every(isValidEntry)) throw new Error("BAD_FORMAT");
-  return list.map(pickEntry);
+  return list.map(toExportEntry);
 }
 
 // A fresh salt per export, never the vault's. The passphrase is expected to
@@ -48,7 +64,7 @@ export async function buildEncryptedExport(entries, passphrase) {
   if (!passphrase) throw new Error("EMPTY_PASSPHRASE");
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const key = await deriveKey(passphrase, salt.buffer);
-  const payload = await encryptJSON(key, { entries: entries.map(pickEntry) });
+  const payload = await encryptJSON(key, { entries: entries.map(toExportEntry) });
   return { kind: EXPORT_KIND, v: EXPORT_VERSION, salt: bufToB64(salt), ...payload };
 }
 
@@ -57,7 +73,7 @@ export function buildPlainExport(entries) {
     kind: EXPORT_KIND,
     v: EXPORT_VERSION,
     plaintext: true,
-    entries: entries.map(pickEntry),
+    entries: entries.map(toExportEntry),
   };
 }
 
@@ -102,7 +118,7 @@ export async function parseImport(fileObj, passphrase) {
 // saying so beats silently keeping whichever came last.
 export function mergeEntries(existing, incoming, overwriteHosts = new Set()) {
   const overwrite = overwriteHosts instanceof Set ? overwriteHosts : new Set(overwriteHosts);
-  const next = existing.map(pickEntry);
+  const next = existing.map(normalizeEntry);
   const indexByHost = new Map(next.map((e, i) => [e.host, i]));
 
   const added = [];
@@ -111,7 +127,7 @@ export function mergeEntries(existing, incoming, overwriteHosts = new Set()) {
   const conflicts = [];
 
   for (const raw of incoming) {
-    const entry = pickEntry(raw);
+    const entry = normalizeEntry(raw);
     const at = indexByHost.get(entry.host);
 
     if (at === undefined) {
@@ -123,7 +139,10 @@ export function mergeEntries(existing, incoming, overwriteHosts = new Set()) {
 
     conflicts.push(entry.host);
     if (overwrite.has(entry.host)) {
-      next[at] = entry;
+      // Overwrite replaces the credential, not the local setting: hardReload is
+      // a property of how *this machine* browses the host, and the file being
+      // imported has no opinion about it.
+      next[at] = { ...entry, hardReload: next[at].hardReload };
       overwritten.push(entry.host);
     } else {
       skipped.push(entry.host);

@@ -3,36 +3,19 @@
 HTTP Basic 認証の資格情報を暗号化保存して自動入力する Chrome 拡張（Manifest V3）。
 利用者は2人（社内・両者 macOS）。Chrome ウェブストアには出さず、git clone で配布する。
 
-- 要件: [`PROJECT_SPEC.md`](../PROJECT_SPEC.md)
-- 詳細設計: [`docs/DESIGN.md`](../docs/DESIGN.md)
-- タスク台帳: `~/Documents/claude-shared/basic-auth-autofill/tasks.md`（repo 外・コミットしない）
+- 開発: [`docs/DEVELOPMENT.md`](../docs/DEVELOPMENT.md)
+- 作業用の仕様（受け入れ条件つき）とタスク台帳: `~/Documents/claude-shared/basic-auth-autofill/`（repo 外）
 
 ## 構成の大原則
 
-**`extension/` の中には、ブラウザに読み込ませるものだけを置く。**
+**`extension/` の中には、ブラウザに読み込ませるものだけを置く。** Chrome に渡すのは
+`extension/` であってリポジトリのルートではない。開発用のものを混ぜると起動時の読み込みが
+通らなくなり、**再起動のたびに拡張が消える**（実際に踏んだ。経緯は `docs/DEVELOPMENT.md`）。
 
-Chrome に渡すのは `extension/` であってリポジトリルートではない。ルートには開発用のものしか
-置かない（`node_modules/` `tools/` `test/` `docs/` `.git/`）。
+**拡張本体はビルド不要。** バンドラ導入やトランスパイル前提のコードは入れない。
 
-> ⚠️ この分離は事故から来ている。v0.3.0 の開発中、リポジトリルートを Chrome に読み込ませたまま
-> `pnpm install` を実行し、拡張ディレクトリが 40 ファイルから 1890 ファイル（シンボリックリンク
-> 192 本、`_` 始まりのファイル多数）に膨れた。結果 **Chrome を再起動するたびに拡張が消える**
-> ようになり、原因特定に長時間を要した。`extension/` に何かを足すときは「これはブラウザが
-> 読む必要があるか」を必ず問うこと。
-
-**拡張本体はビルド不要**。`chrome://extensions` で `extension/` を unpacked 読み込みすればそのまま動く。
-この性質を壊す変更（バンドラ導入・トランスパイル前提のコード）は入れない。
-
-## `chrome.*` 依存の境界
-
-設計上いちばん重要な線。
-
-- `extension/src/crypto.js` `extension/src/transfer.js` `extension/src/host.js` `extension/src/suggest.js`
-  — `chrome.*` を**参照しない**。Node でそのままテストできる
-- `extension/src/vault.js` `extension/src/background.js` — `chrome.storage` / `chrome.webRequest` / native に依存
-- DOM 操作・ファイル入出力は `extension/src/options.js` `extension/src/popup.js` に閉じる
-
-純粋モジュールに `chrome.*` を持ち込むと `test/` が動かなくなる。
+**`chrome.*` 依存の線**が設計上いちばん重要。`crypto.js` `host.js` `transfer.js` `suggest.js` は
+`chrome.*` を参照しない（Node でテストできる）。DOM とファイル入出力は `popup.js` `options.js` に閉じる。
 
 ## コマンド
 
@@ -93,13 +76,10 @@ node tools/ext-id.js      # manifest.json の key から拡張 ID を算出
 
 ## 触るときに注意が要る場所
 
-- `extension/src/background.js` の `onAuthRequired` — `asyncBlocking` のコールバックを保留する設計。
-  単一飛行（`unlockInFlight`）を壊すと Touch ID プロンプトが多重に出る
-- `extension/src/native.js` ↔ `native/src/main.swift` — Native Messaging の契約。片方だけ変えない
-- `extension/manifest.json` の `key` — 変えると拡張 ID が変わり、保存データが参照できなくなる。
-  `native/install.sh` の再実行も必要になる
-- `extension/src/transfer.js` のエントリ射影 — **`normalizeEntry`（内部用・`hardReload` を保つ）と
-  `toExportEntry`（出力用・落とす）を混同しない**。1つの関数で兼ねると、インポートのたびに
-  既存エントリのローカル設定が消える
-- **バッジの意味は2つある** — `!`（赤）＝解錠が必要 / `+`（青）＝保存の提案あり。
-  両方成立するときは `!` が勝つ（施錠中は保存もできないため）
+`docs/DEVELOPMENT.md` の「壊しやすい場所」と「実測で分かったこと」を読むこと。要点だけ:
+
+- `transfer.js` の射影は `normalizeEntry` と `toExportEntry` を兼ねない
+- `background.js` の単一飛行（`unlockInFlight`）を壊すと Touch ID が多重に出る
+- バッジは `!`（解錠）が `+`（登録提案）に優先する
+- `manifest.json` の `key` を変えると拡張 ID が変わり保存データが参照できなくなる
+- `extension/src/native.js` ↔ `native/src/main.swift` の契約は片方だけ変えない

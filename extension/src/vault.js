@@ -94,6 +94,17 @@ export async function resetVault() {
 // 32-byte key held behind Touch ID in the native host. Master password stays
 // as the independent recovery path.
 
+// Whether the native host is registered with Chrome at all. A missing host
+// surfaces as chrome.runtime.lastError, which sendNative turns into a rejection
+// — that is the whole signal, no new plumbing needed.
+export async function isNativeHostInstalled() {
+  try {
+    return !!(await sendNative({ cmd: "status" }));
+  } catch {
+    return false;
+  }
+}
+
 export async function isBioEnabled() {
   return !!(await getRaw("local", LOCAL_BIOWRAP));
 }

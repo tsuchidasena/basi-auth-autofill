@@ -8,6 +8,7 @@ import {
   saveEntries,
   findCredentials,
   isBioEnabled,
+  isNativeHostInstalled,
 } from "./vault.js";
 import { normalizeHost } from "./host.js";
 
@@ -63,6 +64,7 @@ async function render() {
   }
   setBadge("解錠済み", "unlocked");
   show("unlocked");
+  await renderSuggestion();
 
   const host = await currentTabHost();
   $("current-host").textContent = host || "（対象外のページ）";
@@ -83,6 +85,60 @@ async function render() {
   }
 }
 
+// --- suggestion (F-08) ---
+// The offer only says "this host let you in but the vault has nothing for it".
+// Chrome adds the credential typed into its own auth dialog downstream of every
+// point an extension can observe, so it has to be entered once here.
+let suggestedHost = null;
+
+async function renderSuggestion() {
+  let resp = null;
+  try {
+    resp = await chrome.runtime.sendMessage({ type: "SUGGESTION_GET" });
+  } catch {
+    // Worker asleep or gone; nothing to offer.
+  }
+  const s = resp?.suggestion;
+  $("suggestion").hidden = !s;
+  suggestedHost = s?.host ?? null;
+  if (!s) return;
+
+  $("sg-title").textContent =
+    s.kind === "update" ? "登録した資格情報が古いようです" : "このサイトを登録しますか？";
+  $("sg-host").textContent = s.host;
+  $("sg-user").value = s.username || "";
+  $("sg-pass").value = "";
+  $("sg-label").value = "";
+  ($("sg-user").value ? $("sg-pass") : $("sg-user")).focus();
+}
+
+$("sg-save").addEventListener("click", async () => {
+  const username = $("sg-user").value;
+  const password = $("sg-pass").value;
+  if (!suggestedHost || !username) return msg("ユーザ名を入力してください。");
+
+  const entries = await getEntries();
+  const previous = entries.find((e) => e.host === suggestedHost);
+  const next = entries.filter((e) => e.host !== suggestedHost);
+  next.push({
+    host: suggestedHost,
+    username,
+    password,
+    label: $("sg-label").value.trim(),
+    // A local preference, not part of the credential — keep it across updates.
+    hardReload: previous?.hardReload === true,
+  });
+  await saveEntries(next);
+  await chrome.runtime.sendMessage({ type: "SUGGESTION_RESOLVE", dismiss: false }).catch(() => null);
+  msg("登録しました。", true);
+  await render();
+});
+
+$("sg-dismiss").addEventListener("click", async () => {
+  await chrome.runtime.sendMessage({ type: "SUGGESTION_RESOLVE", dismiss: true }).catch(() => null);
+  await render();
+});
+
 // --- setup ---
 $("setup-btn").addEventListener("click", async () => {
   const pw = $("setup-pw").value;
@@ -90,8 +146,19 @@ $("setup-btn").addEventListener("click", async () => {
   if (pw.length < 8) return msg("マスターパスワードは8文字以上にしてください。");
   if (pw !== pw2) return msg("確認用パスワードが一致しません。");
   await initVault(pw);
-  msg("設定しました。", true);
   await render();
+
+  // Point at Touch ID while setup is still on the user's mind. The guidance
+  // itself lives in the options page — this popup is too small to carry a
+  // terminal command, and the setup is a once-ever step.
+  const { os } = await chrome.runtime.getPlatformInfo();
+  const needsHost = os === "mac" && !(await isNativeHostInstalled());
+  msg(
+    needsHost
+      ? "設定しました。Touch ID 解錠も使えます —「すべての登録を管理」から設定してください。"
+      : "設定しました。",
+    true
+  );
 });
 
 // --- unlock ---

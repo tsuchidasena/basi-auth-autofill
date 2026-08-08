@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAtQQFdcgbJPC3BZvQnu4Ap0/cJ8zcBRNt95Ni4/XHvFh2oLSHadLHNmZ0T+3qq79Cl1m0aXEK9iQnsrWITwxElPro0nd0zyfsKxj6ffYEaTtrnIEZuJpy530CKEznaLOk8Bb4oLT/74RBUy/iU1Wh7+Cq5IAq/ma+zLvZL50uilerrG4mZb3UFsC1gwt+wOINaS0W9h7T7+Y8Rm0Lhm7E0qDKA+J1cuXy0cKpp5cdUmJMcTwcZHoCIrIdl25IdlVDSKVEJtd0lKa42DBv5PwLDvZkIUyfZjew+3J+gQQpLz8h7BmcI6CZEtgtsLVTyeJd1nvWzdLkcoF36l6gFzt1IQIDAQAB",
   "name": "Basic Auth Autofill",
-  "version": "0.3.2",
+  "version": "0.4.3",
   "description": "HTTP Basic 認証のネイティブダイアログに、暗号化保存した資格情報を自動入力します。",
   "minimum_chrome_version": "108",
   "icons": {
