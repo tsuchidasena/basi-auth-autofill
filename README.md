@@ -83,7 +83,7 @@ Apple ID や Google アカウントには一切依存しません。
 3. **Chrome を再起動**（拡張の再読み込みだけでは反映されません）
 4. 設定画面に戻って **「確認」** → 見つかれば **「Touch ID 解錠を有効化」** が出ます
 
-仕組みの詳細は [`native/README.md`](native/README.md) を参照。
+仕組みの詳細は [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) を参照。
 
 > ⚠️ **セキュリティ上の注意**: 鍵は login キーチェーンに保存され、**ハードウェア保護ではありません**
 > （ハードウェア保護には有料 Apple Developer 署名が必要なため）。このユーザー権限で
@@ -201,28 +201,8 @@ Apple ID や Google アカウントには一切依存しません。
 
 ## 6. v0.2.x からの移行
 
-**新規に導入する方には関係ありません。** v0.2.x から上げるときは、順序を守らないと
-保存データが失われます。
-
-v0.3.0 で拡張 ID を固定した関係で、**アップグレード時に一度だけ ID が変わります**。
-Chrome は ID ごとに保存領域を分けているため、旧 ID のデータは新しい拡張から読めません。
-
-1. **先に旧バージョンの登録内容を控える**（v0.2.x にエクスポート機能はありません）。
-   件数が多い場合は、新しい版を**別フォルダに追加で読み込み**、旧拡張の設定画面を見ながら
-   登録し直すのが確実です
-2. **`chrome://extensions` で旧バージョンの拡張を「削除」する**
-
-   > ⚠️ ここで「再読み込み」を押してはいけません。ID が変わるため、Chrome のプロファイルに
-   > **旧 ID の登録が残ったまま新 ID の登録が追加され**、同じフォルダを指す登録が2つになります。
-   > この状態になると Chrome を再起動するたびに拡張が消えます。
-
-3. フォルダを最新に更新し、「パッケージ化されていない拡張機能を読み込む」で **`extension/`** を読み込む
-4. **Chrome を一度再起動し、拡張が消えないことを確認する**
-5. マスターパスワードを設定し直し、控えた資格情報を登録する
-6. Touch ID を使っている場合は `./native/install.sh` を実行し、**Chrome を再起動**してから有効化し直す
-
-> 🔁 移行が済んだあとは、この作業は二度と必要ありません。以降は ID が固定されるので、
-> フォルダを移動しても入れ直してもデータは残ります。
+**新規に導入する方には関係ありません。** v0.2.x から上げると拡張 ID が一度だけ変わり、
+順序を守らないと保存データが失われます。手順は [`RELEASE_NOTE.md`](RELEASE_NOTE.md) の 0.3.0 を参照。
 
 ---
 
@@ -235,42 +215,10 @@ Chrome は ID ごとに保存領域を分けているため、旧 ID のデー�
 - マスターパスワードを忘れると復号できません。設定画面の **リセット** で全削除のみ可能です。
 - content script からはアクセスできません（拡張内の信頼コンテキストのみ）。
 
-## 開発
+## コードを触る方へ
 
-拡張本体は**ビルド不要**です。以下は開発時のみ使います。
-
-```sh
-pnpm install                      # eslint（devDependency のみ）
-pnpm lint
-pnpm test                         # 純粋ロジックの自動テスト
-node tools/local-401-server.js    # 動作確認用の 401 サーバ（user / passwd）
-```
-
-`http://localhost:8765/` で単発の Basic 認証、`/multi` で 401 を返すサブリソースを
-5つ持つページを返します。
-
-## ファイル構成
-```
-extension/           ← Chrome に読み込ませるのはここだけ
-  manifest.json      MV3 マニフェスト（key で拡張 ID を固定）
-  icons/             拡張アイコン（tools/gen-icons.js で再生成可）
-  src/crypto.js      WebCrypto ラッパ（鍵導出・暗号/復号）
-  src/host.js        host の正規化と照合
-  src/suggest.js     保存提案の判定ロジック
-  src/transfer.js    エクスポート/インポートの純粋ロジック
-  src/vault.js       金庫ロジック（初期化・解錠・CRUD・検索・Touch ID）
-  src/native.js      Native Messaging ラッパ
-  src/background.js  Service Worker（認証フック・自動解錠・保存提案・ハードリロード）
-  src/popup.*        ツールバーポップアップ
-  src/options.*      設定画面
-  src/native-test.*  ネイティブホストの検証用ページ（開発用）
-native/              Swift 製ネイティブホスト（build.sh / install.sh / README）
-tools/               開発用スクリプト（ブラウザには読み込まれません）
-test/                自動テスト（node --test）
-PROJECT_SPEC.md      仕様書
-docs/DESIGN.md       詳細設計
-RELEASE_NOTE.md      変更履歴
-```
+開発環境・構成・規約・設計の経緯は [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md)。
+何を作るかと受け入れ条件は [`PROJECT_SPEC.md`](PROJECT_SPEC.md)。
 
 ## 制限事項 / 今後
 - プロキシ認証（`isProxy`）の自動供給は対象外（コード上に枠のみ）
