@@ -86,9 +86,11 @@ async function render() {
 }
 
 // --- suggestion (F-08) ---
-// The offer lives in the service worker; this page only ever learns the host,
-// the username and whether it is a new entry or an update. The password stays
-// on the other side of the message boundary.
+// The offer only says "this host let you in but the vault has nothing for it".
+// Chrome adds the credential typed into its own auth dialog downstream of every
+// point an extension can observe, so it has to be entered once here.
+let suggestedHost = null;
+
 async function renderSuggestion() {
   let resp = null;
   try {
@@ -98,29 +100,42 @@ async function renderSuggestion() {
   }
   const s = resp?.suggestion;
   $("suggestion").hidden = !s;
+  suggestedHost = s?.host ?? null;
   if (!s) return;
 
   $("sg-title").textContent =
-    s.kind === "update" ? "登録済みの資格情報を更新しますか？" : "この資格情報を保存しますか？";
+    s.kind === "update" ? "登録した資格情報が古いようです" : "このサイトを登録しますか？";
   $("sg-host").textContent = s.host;
-  $("sg-user").textContent = s.username;
+  $("sg-user").value = s.username || "";
+  $("sg-pass").value = "";
   $("sg-label").value = "";
+  ($("sg-user").value ? $("sg-pass") : $("sg-user")).focus();
 }
 
 $("sg-save").addEventListener("click", async () => {
-  const r = await chrome.runtime
-    .sendMessage({ type: "SUGGESTION_SAVE", label: $("sg-label").value.trim() })
-    .catch(() => null);
-  if (r?.ok) {
-    msg("保存しました。", true);
-    await render();
-  } else {
-    msg(r?.error ? "保存に失敗しました: " + r.error : "保存に失敗しました。");
-  }
+  const username = $("sg-user").value;
+  const password = $("sg-pass").value;
+  if (!suggestedHost || !username) return msg("ユーザ名を入力してください。");
+
+  const entries = await getEntries();
+  const previous = entries.find((e) => e.host === suggestedHost);
+  const next = entries.filter((e) => e.host !== suggestedHost);
+  next.push({
+    host: suggestedHost,
+    username,
+    password,
+    label: $("sg-label").value.trim(),
+    // A local preference, not part of the credential — keep it across updates.
+    hardReload: previous?.hardReload === true,
+  });
+  await saveEntries(next);
+  await chrome.runtime.sendMessage({ type: "SUGGESTION_RESOLVE", dismiss: false }).catch(() => null);
+  msg("登録しました。", true);
+  await render();
 });
 
 $("sg-dismiss").addEventListener("click", async () => {
-  await chrome.runtime.sendMessage({ type: "SUGGESTION_DISMISS" }).catch(() => null);
+  await chrome.runtime.sendMessage({ type: "SUGGESTION_RESOLVE", dismiss: true }).catch(() => null);
   await render();
 });
 

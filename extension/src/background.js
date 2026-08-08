@@ -6,9 +6,8 @@ import {
   isBioEnabled,
   unlockWithBio,
   getEntries,
-  saveEntries,
 } from "./vault.js";
-import { parseBasicAuth, classifySuggestion } from "./suggest.js";
+import { classifySuggestion, existingUsername } from "./suggest.js";
 import { hostMatches, normalizeHost } from "./host.js";
 
 // How long we hold an auth request open while the Touch ID prompt is up.
@@ -34,8 +33,9 @@ const FAILURE_NOTIFICATION_ID = "bio-unlock-failed";
 // Everything here except the dismissal list lives in memory and dies with the
 // service worker. That is the point: an observed credential must never be
 // findable in extension storage (AC-08-2 / AC-08-7).
-const watching = new Set(); // hosts whose 401 we could not answer
-const pending = new Map(); // requestId -> { host, username, password }
+// host -> true if we had an entry and it was rejected (so the offer is an
+// update rather than a first registration).
+const watching = new Map();
 let suggestion = null; // the one offer awaiting an answer
 
 const DISMISSED_KEY = "suggestDismissed";
@@ -43,14 +43,12 @@ const SUGGEST_NOTIFICATION_ID = "credential-suggestion";
 
 // Touch ID unlock is driven from the background so it completes even if the
 // popup closes when the macOS biometric prompt takes focus. The suggestion
-// messages live here for a different reason: the observed password must not
-// leave this worker, so the popup asks about the offer and asks us to save it,
-// but never receives the password itself.
+// messages are here because the offer lives in this worker's memory; the popup
+// reads it, then tells us how it was resolved.
 const HANDLERS = {
   BIO_UNLOCK: () => unlockWithBio().then(() => ({ ok: true })),
   SUGGESTION_GET: () => describeSuggestion(),
-  SUGGESTION_SAVE: (msg) => saveSuggestion(msg.label),
-  SUGGESTION_DISMISS: () => dismissSuggestion(),
+  SUGGESTION_RESOLVE: (msg) => resolveSuggestion(msg.dismiss === true),
 };
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
@@ -155,7 +153,6 @@ chrome.storage.onChanged.addListener(async (changes, area) => {
 // offer that did not. Recomputing at startup means a stale hint clears itself
 // instead of pointing at something that is no longer there.
 refreshBadge();
-console.log("[F-08] service worker started");
 
 chrome.webRequest.onAuthRequired.addListener(
   (details, asyncCallback) => {
@@ -174,18 +171,21 @@ async function handleAuth(details) {
   // Scope: server Basic auth only. Proxy auth is intentionally left to the browser.
   if (details.isProxy) return null;
 
-  const prev = attempted.get(details.requestId) || 0;
-  if (prev >= 1) {
-    // We already tried our credentials once and they were rejected.
-    // Stop autofilling so the user can correct them in the native dialog.
-    attempted.delete(details.requestId);
-    return null;
-  }
-
   let host;
   try {
     host = new URL(details.url).host;
   } catch {
+    return null;
+  }
+
+  const prev = attempted.get(details.requestId) || 0;
+  if (prev >= 1) {
+    // We already tried our credentials once and they were rejected. Stop
+    // autofilling so the user can correct them in the native dialog — and
+    // remember that an entry exists, because getting in from here means the
+    // stored password is stale rather than missing.
+    attempted.delete(details.requestId);
+    watching.set(host, true);
     return null;
   }
 
@@ -202,132 +202,10 @@ async function handleAuth(details) {
   }
 
   if (cred) attempted.set(details.requestId, prev + 1);
-  else {
-    watching.add(host); // we left this one to the dialog — watch what gets typed
-    console.log(`[F-08] watching ${host} (req=${details.requestId})`);
-  }
+  // Nothing to supply. If the user gets in through the dialog anyway, the vault
+  // is missing this host.
+  else watching.set(host, false);
   return cred;
-}
-
-// --- F-08: observe, then offer ---------------------------------------------
-
-// Authorization is withheld from onBeforeSendHeaders unless "extraHeaders" is
-// requested — without it this listener sees every header except the one that
-// matters. Observation-only listeners remain available in MV3; it is
-// webRequestBlocking that was restricted.
-function observeHeaders(stage, details) {
-  let host;
-  try {
-    host = new URL(details.url).host;
-  } catch {
-    return;
-  }
-  if (!watching.has(host)) return; // only hosts whose 401 we could not answer
-
-  const header = details.requestHeaders?.find((h) => h.name.toLowerCase() === "authorization");
-  console.log(
-    `[F-08] ${stage} ${host} (req=${details.requestId}) — Authorization: ${header ? "present" : "ABSENT"}`
-  );
-  const cred = header && parseBasicAuth(header.value);
-  if (cred) {
-    pending.set(details.requestId, { host, ...cred });
-    console.log(`[F-08] captured ${cred.username} for ${host} via ${stage}`);
-  } else if (header) {
-    console.log(`[F-08] Authorization present but not usable Basic: ${header.value.slice(0, 12)}…`);
-  }
-}
-
-// Two stages, until we know which one carries it. onBeforeSendHeaders reports
-// headers before extensions modify them; onSendHeaders reports what actually
-// went on the wire. Chrome's auth handler adds Authorization after the user
-// fills the dialog, which may well be downstream of the first.
-chrome.webRequest.onBeforeSendHeaders.addListener(
-  (d) => observeHeaders("onBeforeSendHeaders", d),
-  { urls: ["<all_urls>"] },
-  ["requestHeaders", "extraHeaders"]
-);
-
-chrome.webRequest.onSendHeaders.addListener(
-  (d) => observeHeaders("onSendHeaders", d),
-  { urls: ["<all_urls>"] },
-  ["requestHeaders", "extraHeaders"]
-);
-
-async function isDismissed(host) {
-  const r = await chrome.storage.session.get(DISMISSED_KEY);
-  return (r[DISMISSED_KEY] || []).includes(host);
-}
-
-// Only offer once the server has actually accepted the credential. A 401 here
-// means the user mistyped, and mistypes are not worth remembering.
-async function considerOffer(observed) {
-  if (await isDismissed(observed.host)) {
-    console.log(`[F-08] not offering ${observed.host}: dismissed this session`);
-    return;
-  }
-  try {
-    const entries = await getEntries();
-    const kind = classifySuggestion(entries, observed.host, observed.username, observed.password);
-    console.log(`[F-08] classify ${observed.host} -> ${kind}`);
-    if (kind === "same") return; // already stored exactly; stay quiet
-  } catch (e) {
-    console.log(`[F-08] locked while classifying (${e.message}); holding the offer`);
-  }
-
-  suggestion = observed;
-  watching.delete(observed.host);
-  await refreshBadge();
-  console.log(`[F-08] OFFERING ${observed.host} — badge should now show +`);
-  chrome.notifications.create(SUGGEST_NOTIFICATION_ID, {
-    type: "basic",
-    iconUrl: "/icons/icon-128.png",
-    title: "この資格情報を保存しますか？",
-    message: `${observed.host} — 拡張アイコンから保存できます。`,
-  });
-}
-
-// What the popup is allowed to know: never the password.
-async function describeSuggestion() {
-  if (!suggestion) return { suggestion: null };
-  const entries = await getEntries(); // throws LOCKED; the popup shows the gate
-  const kind = classifySuggestion(
-    entries,
-    suggestion.host,
-    suggestion.username,
-    suggestion.password
-  );
-  if (kind === "same") {
-    await clearSuggestion();
-    return { suggestion: null };
-  }
-  return { suggestion: { host: suggestion.host, username: suggestion.username, kind } };
-}
-
-async function saveSuggestion(label) {
-  if (!suggestion) throw new Error("NO_SUGGESTION");
-  const { host, username, password } = suggestion;
-  const entries = await getEntries();
-  const next = entries.filter((e) => e.host !== host);
-  const previous = entries.find((e) => e.host === host);
-  next.push({ host, username, password, label: label || "", hardReload: previous?.hardReload === true });
-  await saveEntries(next);
-  await clearSuggestion();
-  return { ok: true };
-}
-
-async function dismissSuggestion() {
-  if (!suggestion) return { ok: true };
-  const { [DISMISSED_KEY]: list = [] } = await chrome.storage.session.get(DISMISSED_KEY);
-  if (!list.includes(suggestion.host)) list.push(suggestion.host);
-  await chrome.storage.session.set({ [DISMISSED_KEY]: list });
-  await clearSuggestion();
-  return { ok: true };
-}
-
-async function clearSuggestion() {
-  suggestion = null;
-  chrome.notifications.clear(SUGGEST_NOTIFICATION_ID);
-  await refreshBadge();
 }
 
 // --- F-10: always-fresh hosts ----------------------------------------------
@@ -377,27 +255,83 @@ async function maybeForceReload(details) {
 
 chrome.tabs.onRemoved.addListener((tabId) => recentlyForced.delete(tabId));
 
-// Clean up the attempt counter once the request finishes, and decide whether
-// anything we observed on the way is worth offering.
+// Clean up the attempt counter once a request finishes. A 2xx on a host we
+// could not answer for means the user got in through the browser's dialog —
+// which is the cue to offer to register it.
 chrome.webRequest.onCompleted.addListener(
   (d) => {
     attempted.delete(d.requestId);
-    const observed = pending.get(d.requestId);
-    if (!observed) return;
-    pending.delete(d.requestId);
-    console.log(`[F-08] completed req=${d.requestId} status=${d.statusCode} for ${observed.host}`);
-    if (d.statusCode >= 200 && d.statusCode < 300) considerOffer(observed);
-    else console.log(`[F-08] dropping: not 2xx`);
+    if (d.statusCode < 200 || d.statusCode >= 300) return;
+    let host;
+    try {
+      host = new URL(d.url).host;
+    } catch {
+      return;
+    }
+    if (watching.has(host)) considerOffer(host, watching.get(host));
   },
   { urls: ["<all_urls>"] }
 );
 
 chrome.webRequest.onCompleted.addListener(maybeForceReload, { urls: ["<all_urls>"] });
 
-chrome.webRequest.onErrorOccurred.addListener(
-  (d) => {
-    attempted.delete(d.requestId);
-    pending.delete(d.requestId);
-  },
-  { urls: ["<all_urls>"] }
-);
+chrome.webRequest.onErrorOccurred.addListener((d) => attempted.delete(d.requestId), {
+  urls: ["<all_urls>"],
+});
+
+// --- F-08: offering to register what the vault was missing ------------------
+
+async function isDismissed(host) {
+  const r = await chrome.storage.session.get(DISMISSED_KEY);
+  return (r[DISMISSED_KEY] || []).includes(host);
+}
+
+// Getting in through the browser's own dialog means the vault could not answer
+// for this host. That is the whole signal — the credential itself is not
+// observable from an extension, and does not need to be.
+async function considerOffer(host, supplied) {
+  if (await isDismissed(host)) return;
+
+  suggestion = { host, supplied };
+  watching.delete(host);
+  await refreshBadge();
+  chrome.notifications.create(SUGGEST_NOTIFICATION_ID, {
+    type: "basic",
+    iconUrl: "/icons/icon-128.png",
+    title: supplied ? "登録した資格情報が古いようです" : "このサイトを登録しますか？",
+    message: `${host} — 拡張アイコンから登録できます。`,
+  });
+}
+
+async function describeSuggestion() {
+  if (!suggestion) return { suggestion: null };
+  const entries = await getEntries(); // throws LOCKED; the popup shows the gate
+  const { host, supplied } = suggestion;
+  return {
+    suggestion: {
+      host,
+      kind: classifySuggestion(entries, host, supplied),
+      username: existingUsername(entries, host),
+    },
+  };
+}
+
+// The popup writes to the vault itself, the same way its quick-add form does;
+// this only retires the offer. Dismissing also silences the host for the rest
+// of the browser session.
+async function resolveSuggestion(dismiss) {
+  if (!suggestion) return { ok: true };
+  if (dismiss) {
+    const { [DISMISSED_KEY]: list = [] } = await chrome.storage.session.get(DISMISSED_KEY);
+    if (!list.includes(suggestion.host)) list.push(suggestion.host);
+    await chrome.storage.session.set({ [DISMISSED_KEY]: list });
+  }
+  await clearSuggestion();
+  return { ok: true };
+}
+
+async function clearSuggestion() {
+  suggestion = null;
+  chrome.notifications.clear(SUGGEST_NOTIFICATION_ID);
+  await refreshBadge();
+}

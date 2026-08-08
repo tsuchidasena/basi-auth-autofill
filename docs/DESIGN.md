@@ -422,99 +422,87 @@ F-01・F-02 は自動＋手動、F-03・F-04・F-06 は手動のみ。
 
 ---
 
-## 10. F-08 — 資格情報の記憶提案
+## 10. F-08 — 登録忘れの検知と登録提案
 
-### 成立条件（調査済み・スパイク不要）
+### 当初の方式が成立しなかった（実測・2026-08-08）
 
-- 観測用の `webRequest` は MV3 でも `webRequest` 権限だけで動く（制限されたのは `webRequestBlocking`）
-- **`Authorization` は既定で `onBeforeSendHeaders` に渡ってこない。** `extraHeaders` の指定が要る
+「ダイアログに打たれた資格情報を `Authorization` ヘッダから観測する」案は**動かない**。
 
-```js
-chrome.webRequest.onBeforeSendHeaders.addListener(
-  onHeaders, { urls: ["<all_urls>"] }, ["requestHeaders", "extraHeaders"]
-);
+同じリクエストについて、拡張からは `onBeforeSendHeaders` / `onSendHeaders` の**両方で
+`Authorization: ABSENT`** と観測される一方、サーバには `Authorization` 付きで到達していた。
+**Chrome の認証ハンドラは webRequest の観測点より下流で資格情報を差し込んでいる。**
+
+公式ドキュメントの「`Authorization` は `extraHeaders` で見える」は、拡張自身が組み立てる
+リクエストの話であって、ブラウザのダイアログが入れる資格情報には当てはまらなかった。
+ドキュメントだけで成立を判断したのが誤りで、実測が必要だった。
+
+### 採用した方式
+
+観測できるのは「**この host へのリクエストが 2xx で完了した**」という事実だけ。
+それで十分に「認証が通ったのに金庫に無い」を検知できる。
+
+```
+onAuthRequired  … 供給できなかった → watching.set(host, supplied)
+       ↓             supplied = 供給したが拒否された（＝登録が古い）
+onCompleted 2xx … watching に居る host → 提案
+       ↓
+バッジ「+」＋通知  →  ツールバーアイコン
+       ↓
+ポップアップが host を埋めたフォームを出す（update なら既存のユーザ名も）
+       ↓
+登録 → ポップアップが金庫に書く ／ 却下 → suggestDismissed に host
 ```
 
-**新しい権限は不要**（`webRequest` と `<all_urls>` は既に持っている）。
+**入力は2回**になる（ダイアログ＋フォーム）。当初の「1回」は達成できない。
+ただし**登録し忘れは無くなる**し、一度登録すれば以降は自動入力される。
+
+**副次的な利点**: 拡張が平文の資格情報を一時的に持つ必要がなくなった。
+「観測した資格情報をどこにどれだけ保持するか」という論点そのものが消えている。
 
 ### 状態と寿命
 
 | 置き場所 | 内容 | 寿命 |
 |---|---|---|
-| SW メモリ `watching: Set<host>` | 「401 が来たが供給できなかった」host | SW 停止で消える |
-| SW メモリ `pending: Map<requestId, {host, username, password}>` | 観測した資格情報 | 同上 |
-| SW メモリ `suggestion` | 提案中の1件 | 同上 |
+| SW メモリ `watching: Map<host, supplied>` | 供給できなかった host と、その理由 | SW 停止で消える |
+| SW メモリ `suggestion` | 提案中の1件 `{host, supplied}` | 同上 |
 | `storage.session` `suggestDismissed: string[]` | 却下された host | ブラウザ終了で消える |
 
-**資格情報は storage に一切書かない**（AC-08-2 / AC-08-7）。却下リストだけは
-「SW が落ちても却下が効き続ける」必要があるので `storage.session` に置く（F-04 の `bioSuppressed` と同じ理由）。
+却下リストだけ `storage.session` なのは、SW が落ちても却下が効き続ける必要があるため
+（F-04 の `bioSuppressed` と同じ理由）。
 
-### 処理フロー
+### new と update の判別
 
-```
-onAuthRequired  … 供給できなかった → watching.add(host)
-       ↓
-onBeforeSendHeaders  … host が watching にあり Authorization: Basic があれば
-                       pending.set(requestId, 復号した {username, password})
-       ↓
-onCompleted  … 2xx なら classifySuggestion() で判定 → 提案
-             … 2xx 以外なら pending.delete()（AC-08-3）
-       ↓
-バッジ「+」＋通知  →  利用者がツールバーアイコンをクリック
-       ↓
-ポップアップが SUGGESTION_GET でメモリ上の提案を取得 → 確認カード表示
-       ↓
-保存 → 金庫へ ／ 却下 → suggestDismissed に host を追加
-```
+金庫だけでは決まらない。「登録があるのにダイアログから入れた」＝供給した資格情報が
+拒否されたということなので、**その事実を `onAuthRequired` の側で記録しておく**。
 
-`onErrorOccurred` でも `pending.delete(requestId)` する（取りこぼし防止）。
+`handleAuth` は host の解析を `attempted` の判定より前に行う。拒否された経路
+（`prev >= 1`）は早期 return するので、そこで `watching.set(host, true)` しないと
+update を取りこぼす。
 
 ### バッジの意味が2つになる
-
-F-04 が既にバッジを使っているので、記号で分ける。
 
 | 表示 | 意味 | 色 |
 |---|---|---|
 | `!` | 解錠が必要（F-04） | 赤 `#dc2626` |
-| `+` | 保存の提案あり（F-08） | 青 `#2563eb` |
+| `+` | 登録の提案あり（F-08） | 青 `#2563eb` |
 
-**両方成立するときは `!` が勝つ** — 施錠中は保存もできないため。解錠でバッジを消す既存の
-`storage.onChanged` ハンドラは、提案が残っていれば `+` に描き替える。
-
-### 提案 UI をポップアップに置く理由
-
-`chrome.notifications.onClicked` からポップアップは開けない（`chrome.action.openPopup()` は
-呼び出し文脈が限られる）。設定画面を開く手もあるが、**通知は気づかせる役・バッジは状態の持続表示役・
-ポップアップが操作面**という F-04 で確立した役割分担に揃えるほうが、利用者が覚えることが増えない。
-
-通知はクリックしても何もしない（文言で「拡張アイコンから保存できます」と誘導する）。
-
-### 提案が消えている場合
-
-SW が停止すると提案はメモリごと消えるが、**バッジはブラウザ側の状態なので残る**。
-これは **SW 起動時に `refreshBadge()` を呼ぶ**ことで解消する — 提案が無ければバッジも消える。
-
-当初はポップアップ側で「期限切れ」を表示する設計にしていたが、起動時の再計算のほうが
-単純で、しかもポップアップを開かなくても直る。`watching` も消えているので、
-次の 401 から自然にやり直しになる。AC-08-7 どおりの挙動。
+**両方成立するときは `!` が勝つ** — 施錠中は登録もできないため。
+SW 起動時に `refreshBadge()` を呼び、提案が消えているのにバッジだけ残る状態を防ぐ。
 
 ### 純粋ロジック — `extension/src/suggest.js`
 
-`chrome.*` を参照しない。`node --test` の対象（`crypto.js` `transfer.js` `host.js` と同じ扱い）。
-
 ```js
-export function parseBasicAuth(headerValue);
-// "Basic dXNlcjpwYXNz" -> { username, password } / 不正なら null
-
-export function classifySuggestion(entries, host, username, password);
-// -> "new"     … その host の登録が無い
-// -> "update"  … 登録はあるが username か password が違う（AC-08-5）
-// -> "same"    … 完全に一致（提案しない）
+export function hasEntryFor(entries, host);              // 正規化して照合
+export function classifySuggestion(entries, host, supplied); // "new" | "update"
+export function existingUsername(entries, host);         // update の初期値
 ```
 
-判定を純粋関数に切り出すことで、「同じ資格情報で毎回提案が出る」類の退行をテストで止められる。
+`chrome.*` を参照しない。`node --test` の対象。
 
----
+### 既知の割り切り
+
+検知は「watching に居る host への 2xx」なので、**認証不要のパスが 200 を返しても提案が出る**。
+一度却下すればそのセッション中は黙るので実害は小さいと判断した。
 
 ## 11. F-10 — サイト単位のハードリロード
 

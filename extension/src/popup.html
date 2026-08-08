@@ -30,19 +30,17 @@
 
     <!-- View: unlocked -->
     <section id="view-unlocked" hidden>
-      <!-- The password is deliberately not sent to this page; the background
-           holds it until "保存" is pressed. -->
+      <!-- The credential the user typed into the browser's dialog is not
+           observable from an extension, so this asks for it once. -->
       <section id="suggestion" class="suggest" hidden>
         <div class="suggest-title" id="sg-title"></div>
-        <dl class="suggest-facts">
-          <dt>Host</dt><dd id="sg-host"></dd>
-          <dt>ユーザ名</dt><dd id="sg-user"></dd>
-          <dt>パスワード</dt><dd>••••••••</dd>
-        </dl>
+        <p class="suggest-host" id="sg-host"></p>
+        <input id="sg-user" type="text" placeholder="ユーザ名" autocomplete="off" />
+        <input id="sg-pass" type="password" placeholder="パスワード" autocomplete="off" />
         <input id="sg-label" type="text" placeholder="メモ（任意）" autocomplete="off" />
         <div class="row">
-          <button id="sg-save" class="primary">保存</button>
-          <button id="sg-dismiss">今回は保存しない</button>
+          <button id="sg-save" class="primary">登録</button>
+          <button id="sg-dismiss">今回はしない</button>
         </div>
       </section>
 
