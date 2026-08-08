@@ -3,9 +3,8 @@
 HTTP Basic 認証の資格情報を暗号化保存して自動入力する Chrome 拡張（Manifest V3）。
 利用者は2人（社内・両者 macOS）。Chrome ウェブストアには出さず、git clone で配布する。
 
-- 要件: [`PROJECT_SPEC.md`](../PROJECT_SPEC.md)
 - 開発: [`docs/DEVELOPMENT.md`](../docs/DEVELOPMENT.md)
-- タスク台帳: `~/Documents/claude-shared/basic-auth-autofill/tasks.md`（repo 外・コミットしない）
+- 作業用の仕様（受け入れ条件つき）とタスク台帳: `~/Documents/claude-shared/basic-auth-autofill/`（repo 外）
 
 ## 構成の大原則
 

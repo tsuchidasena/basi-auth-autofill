@@ -218,11 +218,10 @@ Apple ID や Google アカウントには一切依存しません。
 ## コードを触る方へ
 
 開発環境・構成・規約・設計の経緯は [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md)。
-何を作るかと受け入れ条件は [`PROJECT_SPEC.md`](PROJECT_SPEC.md)。
 
 ## 制限事項 / 今後
 - プロキシ認証（`isProxy`）の自動供給は対象外（コード上に枠のみ）
 - `chrome.storage.sync` による端末間同期は未対応（エクスポート / インポートで代替）
 - ハードウェア保護の Touch ID は未対応（有料 Apple Developer 署名が必要なため）
 - マスターパスワードを忘れた場合の復旧手段は未実装（リセット＝全削除のみ）
-- 「施錠しない」設定は未実装（仕様は `PROJECT_SPEC.md` に確定済み）
+- 「施錠しない」設定は未実装
